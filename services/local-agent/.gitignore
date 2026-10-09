@@ -1,0 +1,5 @@
+node_modules/
+*.log
+.tmp_*
+# 文件态持久化运行数据（任务原始 CSV、事件日志、沙箱产物）
+.data/

@@ -1,0 +1,10 @@
+scenario,lambda,K,executable,infeasibleRejected,selectedIds,selectedUtilitySum,selectedUtilityMin,pairwiseSimMean,pairwiseSimMax,minPairDiffDims,diversityOk,stability,warnings
+01_trend_long,0.5,8,8,0,c_convention_line_err|c_density_dual|c_clarity_scatter,2.545,0.809,0.347,0.43,4,true,1,
+02_group_comparison,0.5,8,8,0,c_convention_heatmap|c_clarity_bar_err|c_density_2x2,2.628,0.831,0.252,0.27,5,true,1,
+03_high_density,0.5,8,8,0,c_convention_heatmap|c_convention_line_err|c_density_2x2,2.643,0.831,0.27,0.285,5,true,1,
+04_duplicate_candidates,0.5,8,6,2,line_dup_same_id|bar_a|dual_a,2.484,0.777,0.321,0.39,4,true,1,检测到重复候选 id：line_dup_same_id（已按效用保留一份）
+05a_infeasible_eliminated,0.5,8,3,5,line_ok|bar_ok|dual_ok,2.36,0.749,0.321,0.39,4,true,1,
+05b_too_few_feasible,0.5,3,2,1,line_ok|bar_ok,1.611,0.793,0.39,0.39,4,true,1,可执行候选 2 个，少于最终方案数 k=3（说明书要求重新生成或明确失败）
+05c_no_valid_candidate,0.5,2,0,2,,0,,,,,false,1,thrown: NO_VALID_CANDIDATE 没有可执行候选：无法选出最终方案（说明书 8.4：重新生成或明确失败）
+06_extreme_preference__default,0.5,8,8,0,c_convention_line_err|c_density_dual|c_clarity_scatter,2.545,0.809,0.347,0.43,4,true,1,
+06_extreme_preference__extreme,0.5,8,8,0,c_density_dual|c_convention_line_err|c_clarity_scatter,2.445,0.77,0.347,0.43,4,true,1,

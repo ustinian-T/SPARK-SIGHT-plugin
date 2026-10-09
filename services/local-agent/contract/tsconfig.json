@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "noLib": false,
+    "types": []
+  },
+  "include": ["fixtures.ts", "../../../apps/web/src/types/index.ts"]
+}

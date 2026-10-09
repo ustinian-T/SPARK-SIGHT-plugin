@@ -1,0 +1,1137 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-24T04:04:48.869Z",
+  "spec": {
+    "utilityWeights": {
+      "DataFit": 0.3,
+      "TaskFit": 0.2,
+      "Readability": 0.15,
+      "ScientificConvention": 0.15,
+      "PreferenceFit": 0.1,
+      "Executability": 0.1
+    },
+    "similarityWeights": {
+      "chartType": 0.2,
+      "layout": 0.15,
+      "encoding": 0.2,
+      "statPresentation": 0.2,
+      "color": 0.1,
+      "annotation": 0.15
+    },
+    "eventWeights": {
+      "set_default": 1,
+      "select_plan": 0.7,
+      "manual_edit": 0.6,
+      "export": 0.45,
+      "reject": -0.8,
+      "browse": 0
+    },
+    "lambda": 0.5,
+    "candidateCountRange": [
+      6,
+      9
+    ],
+    "minDifferenceDimensions": 2
+  },
+  "runtime": {
+    "iterations": 2000,
+    "buildCandidatePool_mean_ms": 0.0151,
+    "selectMMR_K8_mean_ms": 0.0168
+  },
+  "boundaryChecks": [
+    {
+      "check": "k=0 拒绝",
+      "expected": "INVALID_SELECT_COUNT",
+      "actual": "INVALID_SELECT_COUNT",
+      "pass": true
+    },
+    {
+      "check": "k=2.5 拒绝",
+      "expected": "INVALID_SELECT_COUNT",
+      "actual": "INVALID_SELECT_COUNT",
+      "pass": true
+    },
+    {
+      "check": "λ=1.2 拒绝",
+      "expected": "INVALID_LAMBDA",
+      "actual": "INVALID_LAMBDA",
+      "pass": true
+    },
+    {
+      "check": "候选非数组拒绝",
+      "expected": "INVALID_CANDIDATE",
+      "actual": "INVALID_CANDIDATE",
+      "pass": true
+    },
+    {
+      "check": "缺 id 拒绝",
+      "expected": "INVALID_CANDIDATE",
+      "actual": "INVALID_CANDIDATE",
+      "pass": true
+    },
+    {
+      "check": "可执行候选不足 3 个严格拒绝",
+      "expected": "INSUFFICIENT_CANDIDATES",
+      "actual": "INSUFFICIENT_CANDIDATES",
+      "pass": true
+    },
+    {
+      "check": "权重和≠1 拒绝",
+      "expected": "INVALID_WEIGHTS",
+      "actual": "INVALID_WEIGHTS",
+      "pass": true
+    },
+    {
+      "check": "子分越界拒绝",
+      "expected": "INVALID_SCORE",
+      "actual": "INVALID_SCORE",
+      "pass": true
+    }
+  ],
+  "lambdaSweep": [
+    {
+      "lambda": 0,
+      "selectedIds": [
+        "c_convention_line_err",
+        "c_clarity_scatter",
+        "c_density_dual"
+      ],
+      "selectedUtilitySum": 2.557,
+      "pairwiseSimilarityMean": 0.347,
+      "pairwiseSimilarityMax": 0.43,
+      "minPairDifferenceDims": 4,
+      "diversityOk": true
+    },
+    {
+      "lambda": 0.25,
+      "selectedIds": [
+        "c_convention_line_err",
+        "c_density_dual",
+        "c_clarity_scatter"
+      ],
+      "selectedUtilitySum": 2.557,
+      "pairwiseSimilarityMean": 0.347,
+      "pairwiseSimilarityMax": 0.43,
+      "minPairDifferenceDims": 4,
+      "diversityOk": true
+    },
+    {
+      "lambda": 0.5,
+      "selectedIds": [
+        "c_convention_line_err",
+        "c_density_dual",
+        "c_convention_heatmap"
+      ],
+      "selectedUtilitySum": 2.487,
+      "pairwiseSimilarityMean": 0.254,
+      "pairwiseSimilarityMax": 0.317,
+      "minPairDifferenceDims": 5,
+      "diversityOk": true
+    },
+    {
+      "lambda": 0.75,
+      "selectedIds": [
+        "c_convention_line_err",
+        "c_density_dual",
+        "c_convention_heatmap"
+      ],
+      "selectedUtilitySum": 2.487,
+      "pairwiseSimilarityMean": 0.254,
+      "pairwiseSimilarityMax": 0.317,
+      "minPairDifferenceDims": 5,
+      "diversityOk": true
+    },
+    {
+      "lambda": 1,
+      "selectedIds": [
+        "c_convention_line_err",
+        "c_density_dual",
+        "c_convention_heatmap"
+      ],
+      "selectedUtilitySum": 2.487,
+      "pairwiseSimilarityMean": 0.254,
+      "pairwiseSimilarityMax": 0.317,
+      "minPairDifferenceDims": 5,
+      "diversityOk": true
+    }
+  ],
+  "p0": {
+    "executableCandidates": 8,
+    "coverage": {
+      "bar": true,
+      "line": true,
+      "scatter": true,
+      "heatmap": true,
+      "panel2x2": true
+    },
+    "missingValuesPreserved": true
+  },
+  "scenarios": [
+    {
+      "scenario": "01_trend_long",
+      "description": "长趋势（8 点×2 系列）：折线/惯例候选应在效用上领先",
+      "lambda": 0.5,
+      "K": 8,
+      "executableCount": 8,
+      "infeasibleRejected": 0,
+      "selectedIds": [
+        "c_convention_line_err",
+        "c_density_dual",
+        "c_clarity_scatter"
+      ],
+      "selectedUtilitySum": 2.545,
+      "selectedUtilityMin": 0.809,
+      "pairwiseSimilarity": [
+        0.317,
+        0.43,
+        0.295
+      ],
+      "pairwiseSimilarityMean": 0.347,
+      "pairwiseSimilarityMax": 0.43,
+      "minPairDifferenceDims": 4,
+      "diversityOk": true,
+      "stability": 1,
+      "warnings": [],
+      "trace": [
+        {
+          "step": 1,
+          "candidateId": "c_convention_line_err",
+          "utility": 0.901,
+          "maxSimilarity": null,
+          "mmrScore": 0.901
+        },
+        {
+          "step": 2,
+          "candidateId": "c_density_dual",
+          "utility": 0.809,
+          "maxSimilarity": 0.317,
+          "mmrScore": 0.651
+        },
+        {
+          "step": 3,
+          "candidateId": "c_clarity_scatter",
+          "utility": 0.835,
+          "maxSimilarity": 0.43,
+          "mmrScore": 0.62
+        }
+      ],
+      "rejected": [],
+      "pool": [
+        {
+          "candidateId": "c_clarity_bar",
+          "chartType": "grouped_bar",
+          "utility": 0.72,
+          "executable": true,
+          "selected": false,
+          "infeasibleReason": null
+        },
+        {
+          "candidateId": "c_convention_line_err",
+          "chartType": "line_error",
+          "utility": 0.901,
+          "executable": true,
+          "selected": true,
+          "infeasibleReason": null
+        },
+        {
+          "candidateId": "c_density_dual",
+          "chartType": "dual_line_normalized",
+          "utility": 0.809,
+          "executable": true,
+          "selected": true,
+          "infeasibleReason": null
+        },
+        {
+          "candidateId": "c_clarity_bar_err",
+          "chartType": "grouped_bar_error",
+          "utility": 0.712,
+          "executable": true,
+          "selected": false,
+          "infeasibleReason": null
+        },
+        {
+          "candidateId": "c_density_2x2",
+          "chartType": "panel_2x2",
+          "utility": 0.717,
+          "executable": true,
+          "selected": false,
+          "infeasibleReason": null
+        },
+        {
+          "candidateId": "c_density_2x1",
+          "chartType": "dual_line_normalized",
+          "utility": 0.8,
+          "executable": true,
+          "selected": false,
+          "infeasibleReason": null
+        },
+        {
+          "candidateId": "c_convention_heatmap",
+          "chartType": "correlation_heatmap",
+          "utility": 0.624,
+          "executable": true,
+          "selected": false,
+          "infeasibleReason": null
+        },
+        {
+          "candidateId": "c_clarity_scatter",
+          "chartType": "point_scatter",
+          "utility": 0.835,
+          "executable": true,
+          "selected": true,
+          "infeasibleReason": null
+        }
+      ]
+    },
+    {
+      "scenario": "02_group_comparison",
+      "description": "短观测点多系列（3 点×4 系列+sd）：组间比较信号，柱状候选相对受益",
+      "lambda": 0.5,
+      "K": 8,
+      "executableCount": 8,
+      "infeasibleRejected": 0,
+      "selectedIds": [
+        "c_convention_heatmap",
+        "c_clarity_bar_err",
+        "c_density_2x2"
+      ],
+      "selectedUtilitySum": 2.628,
+      "selectedUtilityMin": 0.831,
+      "pairwiseSimilarity": [
+        0.27,
+        0.249,
+        0.238
+      ],
+      "pairwiseSimilarityMean": 0.252,
+      "pairwiseSimilarityMax": 0.27,
+      "minPairDifferenceDims": 5,
+      "diversityOk": true,
+      "stability": 1,
+      "warnings": [],
+      "trace": [
+        {
+          "step": 1,
+          "candidateId": "c_convention_heatmap",
+          "utility": 0.911,
+          "maxSimilarity": null,
+          "mmrScore": 0.911
+        },
+        {
+          "step": 2,
+          "candidateId": "c_clarity_bar_err",
+          "utility": 0.886,
+          "maxSimilarity": 0.27,
+          "mmrScore": 0.751
+        },
+        {
+          "step": 3,
+          "candidateId": "c_density_2x2",
+          "utility": 0.831,
+          "maxSimilarity": 0.249,
+          "mmrScore": 0.706
+        }
+      ],
+      "rejected": [],
+      "pool": [
+        {
+          "candidateId": "c_clarity_bar",
+          "chartType": "grouped_bar",
+          "utility": 0.88,
+          "executable": true,
+          "selected": false,
+          "infeasibleReason": null
+        },
+        {
+          "candidateId": "c_convention_line_err",
+          "chartType": "line_error",
+          "utility": 0.709,
+          "executable": true,
+          "selected": false,
+          "infeasibleReason": null
+        },
+        {
+          "candidateId": "c_density_dual",
+          "chartType": "dual_line_normalized",
+          "utility": 0.705,
+          "executable": true,
+          "selected": false,
+          "infeasibleReason": null
+        },
+        {
+          "candidateId": "c_clarity_bar_err",
+          "chartType": "grouped_bar_error",
+          "utility": 0.886,
+          "executable": true,
+          "selected": true,
+          "infeasibleReason": null
+        },
+        {
+          "candidateId": "c_density_2x2",
+          "chartType": "panel_2x2",
+          "utility": 0.831,
+          "executable": true,
+          "selected": true,
+          "infeasibleReason": null
+        },
+        {
+          "candidateId": "c_density_2x1",
+          "chartType": "dual_line_normalized",
+          "utility": 0.696,
+          "executable": true,
+          "selected": false,
+          "infeasibleReason": null
+        },
+        {
+          "candidateId": "c_convention_heatmap",
+          "chartType": "correlation_heatmap",
+          "utility": 0.911,
+          "executable": true,
+          "selected": true,
+          "infeasibleReason": null
+        },
+        {
+          "candidateId": "c_clarity_scatter",
+          "chartType": "point_scatter",
+          "utility": 0.721,
+          "executable": true,
+          "selected": false,
+          "infeasibleReason": null
+        }
+      ]
+    },
+    {
+      "scenario": "03_high_density",
+      "description": "高密度（6 点×4 系列=24）：双面板密度候选 TaskFit 信号上调",
+      "lambda": 0.5,
+      "K": 8,
+      "executableCount": 8,
+      "infeasibleRejected": 0,
+      "selectedIds": [
+        "c_convention_heatmap",
+        "c_convention_line_err",
+        "c_density_2x2"
+      ],
+      "selectedUtilitySum": 2.643,
+      "selectedUtilityMin": 0.831,
+      "pairwiseSimilarity": [
+        0.275,
+        0.249,
+        0.285
+      ],
+      "pairwiseSimilarityMean": 0.27,
+      "pairwiseSimilarityMax": 0.285,
+      "minPairDifferenceDims": 5,
+      "diversityOk": true,
+      "stability": 1,
+      "warnings": [],
+      "trace": [
+        {
+          "step": 1,
+          "candidateId": "c_convention_heatmap",
+          "utility": 0.911,
+          "maxSimilarity": null,
+          "mmrScore": 0.911
+        },
+        {
+          "step": 2,
+          "candidateId": "c_convention_line_err",
+          "utility": 0.901,
+          "maxSimilarity": 0.275,
+          "mmrScore": 0.764
+        },
+        {
+          "step": 3,
+          "candidateId": "c_density_2x2",
+          "utility": 0.831,
+          "maxSimilarity": 0.285,
+          "mmrScore": 0.689
+        }
+      ],
+      "rejected": [],
+      "pool": [
+        {
+          "candidateId": "c_clarity_bar",
+          "chartType": "grouped_bar",
+          "utility": 0.88,
+          "executable": true,
+          "selected": false,
+          "infeasibleReason": null
+        },
+        {
+          "candidateId": "c_convention_line_err",
+          "chartType": "line_error",
+          "utility": 0.901,
+          "executable": true,
+          "selected": true,
+          "infeasibleReason": null
+        },
+        {
+          "candidateId": "c_density_dual",
+          "chartType": "dual_line_normalized",
+          "utility": 0.821,
+          "executable": true,
+          "selected": false,
+          "infeasibleReason": null
+        },
+        {
+          "candidateId": "c_clarity_bar_err",
+          "chartType": "grouped_bar_error",
+          "utility": 0.872,
+          "executable": true,
+          "selected": false,
+          "infeasibleReason": null
+        },
+        {
+          "candidateId": "c_density_2x2",
+          "chartType": "panel_2x2",
+          "utility": 0.831,
+          "executable": true,
+          "selected": true,
+          "infeasibleReason": null
+        },
+        {
+          "candidateId": "c_density_2x1",
+          "chartType": "dual_line_normalized",
+          "utility": 0.812,
+          "executable": true,
+          "selected": false,
+          "infeasibleReason": null
+        },
+        {
+          "candidateId": "c_convention_heatmap",
+          "chartType": "correlation_heatmap",
+          "utility": 0.911,
+          "executable": true,
+          "selected": true,
+          "infeasibleReason": null
+        },
+        {
+          "candidateId": "c_clarity_scatter",
+          "chartType": "point_scatter",
+          "utility": 0.835,
+          "executable": true,
+          "selected": false,
+          "infeasibleReason": null
+        }
+      ]
+    },
+    {
+      "scenario": "04_duplicate_candidates",
+      "description": "重复候选：同 id 去重、近似重复折线被 MMR 边际项抑制，保证差异维度",
+      "lambda": 0.5,
+      "K": 8,
+      "executableCount": 6,
+      "infeasibleRejected": 2,
+      "selectedIds": [
+        "line_dup_same_id",
+        "bar_a",
+        "dual_a"
+      ],
+      "selectedUtilitySum": 2.484,
+      "selectedUtilityMin": 0.777,
+      "pairwiseSimilarity": [
+        0.39,
+        0.317,
+        0.255
+      ],
+      "pairwiseSimilarityMean": 0.321,
+      "pairwiseSimilarityMax": 0.39,
+      "minPairDifferenceDims": 4,
+      "diversityOk": true,
+      "stability": 1,
+      "warnings": [
+        "检测到重复候选 id：line_dup_same_id（已按效用保留一份）"
+      ],
+      "trace": [
+        {
+          "step": 1,
+          "candidateId": "line_dup_same_id",
+          "utility": 0.887,
+          "maxSimilarity": null,
+          "mmrScore": 0.887
+        },
+        {
+          "step": 2,
+          "candidateId": "bar_a",
+          "utility": 0.82,
+          "maxSimilarity": 0.39,
+          "mmrScore": 0.625
+        },
+        {
+          "step": 3,
+          "candidateId": "dual_a",
+          "utility": 0.777,
+          "maxSimilarity": 0.317,
+          "mmrScore": 0.619
+        }
+      ],
+      "rejected": [
+        {
+          "candidateId": "scatter_a",
+          "reason": "CODEGEN_SCATTER_UNIMPLEMENTED"
+        },
+        {
+          "candidateId": "bar_err_a",
+          "reason": "CODEGEN_BAR_ERRORBARS_UNIMPLEMENTED"
+        }
+      ],
+      "pool": [
+        {
+          "candidateId": "line_a",
+          "chartType": "line_error",
+          "utility": 0.85,
+          "executable": true,
+          "selected": false,
+          "infeasibleReason": null
+        },
+        {
+          "candidateId": "line_dup_same_id",
+          "chartType": "line_error",
+          "utility": 0.862,
+          "executable": true,
+          "selected": true,
+          "infeasibleReason": null
+        },
+        {
+          "candidateId": "line_dup_same_id",
+          "chartType": "line_error",
+          "utility": 0.887,
+          "executable": true,
+          "selected": true,
+          "infeasibleReason": null
+        },
+        {
+          "candidateId": "line_mono",
+          "chartType": "line_error",
+          "utility": 0.832,
+          "executable": true,
+          "selected": false,
+          "infeasibleReason": null
+        },
+        {
+          "candidateId": "bar_a",
+          "chartType": "grouped_bar",
+          "utility": 0.82,
+          "executable": true,
+          "selected": true,
+          "infeasibleReason": null
+        },
+        {
+          "candidateId": "dual_a",
+          "chartType": "dual_line_normalized",
+          "utility": 0.777,
+          "executable": true,
+          "selected": true,
+          "infeasibleReason": null
+        },
+        {
+          "candidateId": "scatter_a",
+          "chartType": "point_scatter",
+          "utility": 0.68,
+          "executable": false,
+          "selected": false,
+          "infeasibleReason": "CODEGEN_SCATTER_UNIMPLEMENTED"
+        },
+        {
+          "candidateId": "bar_err_a",
+          "chartType": "grouped_bar_error",
+          "utility": 0.761,
+          "executable": false,
+          "selected": false,
+          "infeasibleReason": "CODEGEN_BAR_ERRORBARS_UNIMPLEMENTED"
+        }
+      ]
+    },
+    {
+      "scenario": "05a_infeasible_eliminated",
+      "description": "不可执行淘汰：5 个高效用但不可执行候选全部被 8.4 规则剔除",
+      "lambda": 0.5,
+      "K": 8,
+      "executableCount": 3,
+      "infeasibleRejected": 5,
+      "selectedIds": [
+        "line_ok",
+        "bar_ok",
+        "dual_ok"
+      ],
+      "selectedUtilitySum": 2.36,
+      "selectedUtilityMin": 0.749,
+      "pairwiseSimilarity": [
+        0.39,
+        0.317,
+        0.255
+      ],
+      "pairwiseSimilarityMean": 0.321,
+      "pairwiseSimilarityMax": 0.39,
+      "minPairDifferenceDims": 4,
+      "diversityOk": true,
+      "stability": 1,
+      "warnings": [],
+      "trace": [
+        {
+          "step": 1,
+          "candidateId": "line_ok",
+          "utility": 0.818,
+          "maxSimilarity": null,
+          "mmrScore": 0.818
+        },
+        {
+          "step": 2,
+          "candidateId": "bar_ok",
+          "utility": 0.793,
+          "maxSimilarity": 0.39,
+          "mmrScore": 0.598
+        },
+        {
+          "step": 3,
+          "candidateId": "dual_ok",
+          "utility": 0.749,
+          "maxSimilarity": 0.317,
+          "mmrScore": 0.591
+        }
+      ],
+      "rejected": [
+        {
+          "candidateId": "line_sig_x",
+          "reason": "SIGNIFICANCE_TEST_OUT_OF_SCOPE"
+        },
+        {
+          "candidateId": "bar_err_x",
+          "reason": "CODEGEN_BAR_ERRORBARS_UNIMPLEMENTED"
+        },
+        {
+          "candidateId": "mono_x",
+          "reason": "CODEGEN_MONOCHROME_THEME_UNIMPLEMENTED"
+        },
+        {
+          "candidateId": "dual2x1_x",
+          "reason": "CODEGEN_LAYOUT_2X1_UNIMPLEMENTED"
+        },
+        {
+          "candidateId": "scatter_x",
+          "reason": "CODEGEN_SCATTER_UNIMPLEMENTED"
+        }
+      ],
+      "pool": [
+        {
+          "candidateId": "bar_ok",
+          "chartType": "grouped_bar",
+          "utility": 0.793,
+          "executable": true,
+          "selected": true,
+          "infeasibleReason": null
+        },
+        {
+          "candidateId": "line_ok",
+          "chartType": "line_error",
+          "utility": 0.818,
+          "executable": true,
+          "selected": true,
+          "infeasibleReason": null
+        },
+        {
+          "candidateId": "dual_ok",
+          "chartType": "dual_line_normalized",
+          "utility": 0.749,
+          "executable": true,
+          "selected": true,
+          "infeasibleReason": null
+        },
+        {
+          "candidateId": "line_sig_x",
+          "chartType": "line_error_significance",
+          "utility": 0.85,
+          "executable": false,
+          "selected": false,
+          "infeasibleReason": "SIGNIFICANCE_TEST_OUT_OF_SCOPE"
+        },
+        {
+          "candidateId": "bar_err_x",
+          "chartType": "grouped_bar_error",
+          "utility": 0.832,
+          "executable": false,
+          "selected": false,
+          "infeasibleReason": "CODEGEN_BAR_ERRORBARS_UNIMPLEMENTED"
+        },
+        {
+          "candidateId": "mono_x",
+          "chartType": "line_error",
+          "utility": 0.827,
+          "executable": false,
+          "selected": false,
+          "infeasibleReason": "CODEGEN_MONOCHROME_THEME_UNIMPLEMENTED"
+        },
+        {
+          "candidateId": "dual2x1_x",
+          "chartType": "dual_line_normalized",
+          "utility": 0.763,
+          "executable": false,
+          "selected": false,
+          "infeasibleReason": "CODEGEN_LAYOUT_2X1_UNIMPLEMENTED"
+        },
+        {
+          "candidateId": "scatter_x",
+          "chartType": "point_scatter",
+          "utility": 0.765,
+          "executable": false,
+          "selected": false,
+          "infeasibleReason": "CODEGEN_SCATTER_UNIMPLEMENTED"
+        }
+      ]
+    },
+    {
+      "scenario": "05b_too_few_feasible",
+      "description": "可执行候选仅 2 个：诊断模式给 warning；生产 strict 模式抛 INSUFFICIENT_CANDIDATES",
+      "lambda": 0.5,
+      "K": 3,
+      "executableCount": 2,
+      "infeasibleRejected": 1,
+      "selectedIds": [
+        "line_ok",
+        "bar_ok"
+      ],
+      "selectedUtilitySum": 1.611,
+      "selectedUtilityMin": 0.793,
+      "pairwiseSimilarity": [
+        0.39
+      ],
+      "pairwiseSimilarityMean": 0.39,
+      "pairwiseSimilarityMax": 0.39,
+      "minPairDifferenceDims": 4,
+      "diversityOk": true,
+      "stability": 1,
+      "warnings": [
+        "可执行候选 2 个，少于最终方案数 k=3（说明书要求重新生成或明确失败）"
+      ],
+      "trace": [
+        {
+          "step": 1,
+          "candidateId": "line_ok",
+          "utility": 0.818,
+          "maxSimilarity": null,
+          "mmrScore": 0.818
+        },
+        {
+          "step": 2,
+          "candidateId": "bar_ok",
+          "utility": 0.793,
+          "maxSimilarity": 0.39,
+          "mmrScore": 0.598
+        }
+      ],
+      "rejected": [
+        {
+          "candidateId": "sig_x",
+          "reason": "X"
+        }
+      ],
+      "pool": [
+        {
+          "candidateId": "bar_ok",
+          "chartType": "grouped_bar",
+          "utility": 0.793,
+          "executable": true,
+          "selected": true,
+          "infeasibleReason": null
+        },
+        {
+          "candidateId": "line_ok",
+          "chartType": "line_error",
+          "utility": 0.818,
+          "executable": true,
+          "selected": true,
+          "infeasibleReason": null
+        },
+        {
+          "candidateId": "sig_x",
+          "chartType": "line_error_significance",
+          "utility": 0.879,
+          "executable": false,
+          "selected": false,
+          "infeasibleReason": "X"
+        }
+      ]
+    },
+    {
+      "scenario": "05c_no_valid_candidate",
+      "description": "无有效候选：稳定抛出 NO_VALID_CANDIDATE",
+      "lambda": 0.5,
+      "K": 2,
+      "executableCount": 0,
+      "infeasibleRejected": 2,
+      "selectedIds": [],
+      "selectedUtilitySum": 0,
+      "selectedUtilityMin": null,
+      "pairwiseSimilarity": [],
+      "pairwiseSimilarityMean": null,
+      "pairwiseSimilarityMax": null,
+      "minPairDifferenceDims": null,
+      "diversityOk": false,
+      "stability": 1,
+      "warnings": [
+        "thrown: NO_VALID_CANDIDATE 没有可执行候选：无法选出最终方案（说明书 8.4：重新生成或明确失败）"
+      ],
+      "trace": [],
+      "rejected": [],
+      "pool": [
+        {
+          "candidateId": "x1",
+          "chartType": "line_error",
+          "utility": 0.82,
+          "executable": false,
+          "selected": false,
+          "infeasibleReason": "X"
+        },
+        {
+          "candidateId": "x2",
+          "chartType": "grouped_bar",
+          "utility": 0.82,
+          "executable": false,
+          "selected": false,
+          "infeasibleReason": "X"
+        }
+      ],
+      "expectedError": "NO_VALID_CANDIDATE"
+    },
+    {
+      "scenario": "06_extreme_preference__default",
+      "description": "极端偏好对照：默认 PreferenceFit 下的选择",
+      "lambda": 0.5,
+      "K": 8,
+      "executableCount": 8,
+      "infeasibleRejected": 0,
+      "selectedIds": [
+        "c_convention_line_err",
+        "c_density_dual",
+        "c_clarity_scatter"
+      ],
+      "selectedUtilitySum": 2.545,
+      "selectedUtilityMin": 0.809,
+      "pairwiseSimilarity": [
+        0.317,
+        0.43,
+        0.295
+      ],
+      "pairwiseSimilarityMean": 0.347,
+      "pairwiseSimilarityMax": 0.43,
+      "minPairDifferenceDims": 4,
+      "diversityOk": true,
+      "stability": 1,
+      "warnings": [],
+      "trace": [
+        {
+          "step": 1,
+          "candidateId": "c_convention_line_err",
+          "utility": 0.901,
+          "maxSimilarity": null,
+          "mmrScore": 0.901
+        },
+        {
+          "step": 2,
+          "candidateId": "c_density_dual",
+          "utility": 0.809,
+          "maxSimilarity": 0.317,
+          "mmrScore": 0.651
+        },
+        {
+          "step": 3,
+          "candidateId": "c_clarity_scatter",
+          "utility": 0.835,
+          "maxSimilarity": 0.43,
+          "mmrScore": 0.62
+        }
+      ],
+      "rejected": [],
+      "pool": [
+        {
+          "candidateId": "c_clarity_bar",
+          "chartType": "grouped_bar",
+          "utility": 0.72,
+          "executable": true,
+          "selected": false,
+          "infeasibleReason": null
+        },
+        {
+          "candidateId": "c_convention_line_err",
+          "chartType": "line_error",
+          "utility": 0.901,
+          "executable": true,
+          "selected": true,
+          "infeasibleReason": null
+        },
+        {
+          "candidateId": "c_density_dual",
+          "chartType": "dual_line_normalized",
+          "utility": 0.809,
+          "executable": true,
+          "selected": true,
+          "infeasibleReason": null
+        },
+        {
+          "candidateId": "c_clarity_bar_err",
+          "chartType": "grouped_bar_error",
+          "utility": 0.712,
+          "executable": true,
+          "selected": false,
+          "infeasibleReason": null
+        },
+        {
+          "candidateId": "c_density_2x2",
+          "chartType": "panel_2x2",
+          "utility": 0.717,
+          "executable": true,
+          "selected": false,
+          "infeasibleReason": null
+        },
+        {
+          "candidateId": "c_density_2x1",
+          "chartType": "dual_line_normalized",
+          "utility": 0.8,
+          "executable": true,
+          "selected": false,
+          "infeasibleReason": null
+        },
+        {
+          "candidateId": "c_convention_heatmap",
+          "chartType": "correlation_heatmap",
+          "utility": 0.624,
+          "executable": true,
+          "selected": false,
+          "infeasibleReason": null
+        },
+        {
+          "candidateId": "c_clarity_scatter",
+          "chartType": "point_scatter",
+          "utility": 0.835,
+          "executable": true,
+          "selected": true,
+          "infeasibleReason": null
+        }
+      ]
+    },
+    {
+      "scenario": "06_extreme_preference__extreme",
+      "description": "极端偏好：密度候选 PreferenceFit=1，首选应切换为密度策略",
+      "lambda": 0.5,
+      "K": 8,
+      "executableCount": 8,
+      "infeasibleRejected": 0,
+      "selectedIds": [
+        "c_density_dual",
+        "c_convention_line_err",
+        "c_clarity_scatter"
+      ],
+      "selectedUtilitySum": 2.445,
+      "selectedUtilityMin": 0.77,
+      "pairwiseSimilarity": [
+        0.317,
+        0.295,
+        0.43
+      ],
+      "pairwiseSimilarityMean": 0.347,
+      "pairwiseSimilarityMax": 0.43,
+      "minPairDifferenceDims": 4,
+      "diversityOk": true,
+      "stability": 1,
+      "warnings": [],
+      "trace": [
+        {
+          "step": 1,
+          "candidateId": "c_density_dual",
+          "utility": 0.841,
+          "maxSimilarity": null,
+          "mmrScore": 0.841
+        },
+        {
+          "step": 2,
+          "candidateId": "c_convention_line_err",
+          "utility": 0.834,
+          "maxSimilarity": 0.317,
+          "mmrScore": 0.676
+        },
+        {
+          "step": 3,
+          "candidateId": "c_clarity_scatter",
+          "utility": 0.77,
+          "maxSimilarity": 0.43,
+          "mmrScore": 0.555
+        }
+      ],
+      "rejected": [],
+      "pool": [
+        {
+          "candidateId": "c_clarity_bar",
+          "chartType": "grouped_bar",
+          "utility": 0.655,
+          "executable": true,
+          "selected": false,
+          "infeasibleReason": null
+        },
+        {
+          "candidateId": "c_convention_line_err",
+          "chartType": "line_error",
+          "utility": 0.834,
+          "executable": true,
+          "selected": true,
+          "infeasibleReason": null
+        },
+        {
+          "candidateId": "c_density_dual",
+          "chartType": "dual_line_normalized",
+          "utility": 0.841,
+          "executable": true,
+          "selected": true,
+          "infeasibleReason": null
+        },
+        {
+          "candidateId": "c_clarity_bar_err",
+          "chartType": "grouped_bar_error",
+          "utility": 0.648,
+          "executable": true,
+          "selected": false,
+          "infeasibleReason": null
+        },
+        {
+          "candidateId": "c_density_2x2",
+          "chartType": "panel_2x2",
+          "utility": 0.749,
+          "executable": true,
+          "selected": false,
+          "infeasibleReason": null
+        },
+        {
+          "candidateId": "c_density_2x1",
+          "chartType": "dual_line_normalized",
+          "utility": 0.832,
+          "executable": true,
+          "selected": false,
+          "infeasibleReason": null
+        },
+        {
+          "candidateId": "c_convention_heatmap",
+          "chartType": "correlation_heatmap",
+          "utility": 0.557,
+          "executable": true,
+          "selected": false,
+          "infeasibleReason": null
+        },
+        {
+          "candidateId": "c_clarity_scatter",
+          "chartType": "point_scatter",
+          "utility": 0.77,
+          "executable": true,
+          "selected": true,
+          "infeasibleReason": null
+        }
+      ]
+    }
+  ],
+  "findings": [
+    "生产候选池 K=8，其中可执行 8、不可执行 0；柱图、折线、散点、热力图和复合布局均已有可执行模板。",
+    "重复候选场景：同 id 重复被去重，近似重复折线未同时入选；入选两两最大相似度 0.39，最小差异维度 4。",
+    "不可执行场景：5 个高效用候选被淘汰，最终入选效用最小值 0.749（低于被淘汰者效用，这是 8.4“可验证性优先”的预期代价）。",
+    "极端偏好：默认首选 c_convention_line_err，PreferenceFit 极端化后首选 c_density_dual；偏好仅通过 PreferenceFit（权重 0.10）影响排序，不改变数据事实。",
+    "λ 敏感性：λ∈{0,0.25,0.5,0.75,1} 下入选集合共 3 种；K=8 全可执行候选允许边际相似度真实参与取舍。",
+    "所有场景洗牌 50 次稳定性均为 1（确定性 tie-break：效用/MMR 降序、candidateId 升序）。"
+  ]
+}

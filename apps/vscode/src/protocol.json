@@ -1,0 +1,6 @@
+{
+  "protocolVersion": 2,
+  "messageTypes": ["agent.config", "diff.open", "selection.read", "patch.apply", "patch.applyHunks", "plans.compare", "text.insert", "diagnostic.reveal", "edit.undo", "handoff.write", "runtime.capabilities", "runtime.runMatlab", "runtime.discover", "runtime.plan", "runtime.run", "runtime.events", "runtime.cancel", "runtime.openArtifact"],
+  "agentStates": ["INGEST", "UNDERSTAND", "NEED_INPUT", "PLAN", "ANALYZE", "DESIGN", "EXECUTE", "VERIFY", "REPAIR", "FAILED", "PRESENT", "ITERATE", "COMPLETE", "CANCELLED"],
+  "hostErrorCodes": ["HOST_PROTOCOL_MISMATCH", "HOST_MESSAGE_INVALID", "HOST_RESPONSE_INVALID", "HOST_RESPONSE_MISMATCH", "HOST_REQUEST_FAILED", "HOST_UNAVAILABLE", "WORKSPACE_UNTRUSTED", "RESOURCE_NOT_ALLOWED", "AGENT_UNAVAILABLE", "PATCH_BASE_STALE", "PATCH_HUNK_INVALID", "PATCH_HUNK_OVERLAP", "PLAN_COMPARISON_INVALID", "MATLAB_UNAVAILABLE", "RUNTIME_NOT_FOUND", "RUNTIME_UNAVAILABLE", "RUNTIME_PLAN_REJECTED", "RUNTIME_PATH_UNSAFE", "RUNTIME_CANCELLED", "RUNTIME_NOT_RUNNING", "ARTIFACT_NOT_FOUND", "ARTIFACT_PATH_UNSAFE", "RUNTIME_EXECUTION_FAILED"]
+}

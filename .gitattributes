@@ -1,0 +1,17 @@
+# 统一以 LF 存储，避免跨平台行尾抖动
+* text=auto eol=lf
+
+# 明确按二进制处理，禁止行尾转换
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.otf binary
+*.ttf binary
+*.woff binary
+*.woff2 binary
+*.vsix binary
+*.tgz binary
+
+# 锁文件在 diff 中折叠
+package-lock.json -diff linguist-generated

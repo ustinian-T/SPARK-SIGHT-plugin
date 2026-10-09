@@ -1,0 +1,52 @@
+# 依赖
+node_modules/
+.npm-cache/
+
+# 构建产物
+dist/
+build/
+*.tsbuildinfo
+
+# 打包装配产物：由 prepare-package.mjs / prepare-dsh.mjs 从
+# apps/web 与 services/local-agent 生成，不入库。
+apps/vscode/agent/
+apps/vscode/web/
+apps/vscode/runtime/
+apps/vscode/dist/
+apps/dsh/resources/
+apps/dsh/*.tgz
+*.vsix
+
+# 日志
+*.log
+npm-debug.log*
+yarn-error.log*
+pnpm-error.log*
+
+# 本地环境与密钥（绝不能提交）
+*.local
+.secrets-denylist.local
+.env
+.env.*
+!.env.example
+**/.data/
+**/.doc-txt/
+*.pem
+*.key
+*.crt
+*.pfx
+*.p12
+*.jks
+
+# 系统 / 编辑器
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# 预览与临时产物
+.preview/
+/release/
+release-report.json
+tsc_out.txt
+build_out.txt

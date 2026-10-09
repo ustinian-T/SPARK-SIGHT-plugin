@@ -1,0 +1,170 @@
+{
+  "name": "deep-imaging-vscode",
+  "displayName": "Deep Imaging",
+  "version": "0.1.2",
+  "private": true,
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "main": "./dist/extension.js",
+  "icon": "media/icon.png",
+  "activationEvents": [
+    "onStartupFinished",
+    "onCommand:deepImaging.open",
+    "onCommand:deepImaging.startAgent",
+    "onCommand:deepImaging.runMatlab",
+    "onCommand:deepImaging.runCurrentFile"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "deepImaging.open",
+        "title": "Deep Imaging: Open"
+      },
+      {
+        "command": "deepImaging.startAgent",
+        "title": "Deep Imaging: Start Local Agent"
+      },
+      {
+        "command": "deepImaging.stopAgent",
+        "title": "Deep Imaging: Stop Local Agent"
+      },
+      {
+        "command": "deepImaging.reviewPatch",
+        "title": "Deep Imaging: Review Patch"
+      },
+      {
+        "command": "deepImaging.openData",
+        "title": "Deep Imaging: Open CSV / Excel / JSON"
+      },
+      {
+        "command": "deepImaging.useSelection",
+        "title": "Deep Imaging: Use Editor Selection"
+      },
+      {
+        "command": "deepImaging.generateVariants",
+        "title": "Deep Imaging: Generate Two Variants"
+      },
+      {
+        "command": "deepImaging.syncProject",
+        "title": "Deep Imaging: Sync Project"
+      },
+      {
+        "command": "deepImaging.exportAdvanced",
+        "title": "Deep Imaging: Advanced Export"
+      },
+      {
+        "command": "deepImaging.showDiagnostics",
+        "title": "Deep Imaging: Show Diagnostics"
+      },
+      {
+        "command": "deepImaging.generate",
+        "title": "Deep Imaging: Generate Three Plans"
+      },
+      {
+        "command": "deepImaging.fix",
+        "title": "Deep Imaging: Fix Current Chart"
+      },
+      {
+        "command": "deepImaging.preview",
+        "title": "Deep Imaging: Preview Chart"
+      },
+      {
+        "command": "deepImaging.compare",
+        "title": "Deep Imaging: Compare Three Plans"
+      },
+      {
+        "command": "deepImaging.export",
+        "title": "Deep Imaging: Export Reproducible Bundle"
+      },
+      {
+        "command": "deepImaging.preferences",
+        "title": "Deep Imaging: Manage Preferences"
+      },
+      {
+        "command": "deepImaging.runMatlab",
+        "title": "Deep Imaging: Run Current MATLAB Script"
+      },
+      {
+        "command": "deepImaging.runCurrentFile",
+        "title": "Deep Imaging: Run Current Python / R / MATLAB / Node File"
+      },
+      {
+        "command": "deepImaging.checkUpdates",
+        "title": "Deep Imaging: Check for Updates"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "deepImaging.open",
+        "key": "ctrl+alt+i",
+        "mac": "cmd+alt+i"
+      },
+      {
+        "command": "deepImaging.openData",
+        "key": "ctrl+alt+o",
+        "mac": "cmd+alt+o"
+      },
+      {
+        "command": "deepImaging.useSelection",
+        "key": "ctrl+alt+s",
+        "mac": "cmd+alt+s",
+        "when": "editorHasSelection"
+      },
+      {
+        "command": "deepImaging.generateVariants",
+        "key": "ctrl+alt+v",
+        "mac": "cmd+alt+v"
+      },
+      {
+        "command": "deepImaging.exportAdvanced",
+        "key": "ctrl+alt+e",
+        "mac": "cmd+alt+e"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "deepImaging.useSelection",
+          "when": "editorHasSelection",
+          "group": "navigation@9"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "deepImaging.openData",
+          "when": "resourceExtname == .csv || resourceExtname == .xlsx || resourceExtname == .json",
+          "group": "navigation@9"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Deep Imaging",
+      "properties": {
+        "deepImaging.matlabPath": {
+          "type": "string",
+          "default": "matlab",
+          "description": "Path to a user-licensed local MATLAB executable."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "test": "vitest run",
+    "build": "tsc -p tsconfig.json",
+    "vscode:prepublish": "npm --prefix ../web run build && npm run build && node scripts/prepare-package.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/vscode": "^1.95.0",
+    "typescript": "~5.6.3",
+    "vite": "^8.3.0",
+    "vitest": "^5.0.1"
+  },
+  "publisher": "ustinian-T",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ustinian-T/SPARK-SIGHT-plugin.git"
+  }
+}

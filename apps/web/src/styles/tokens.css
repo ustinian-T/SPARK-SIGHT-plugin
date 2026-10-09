@@ -1,0 +1,136 @@
+:root {
+  /* 浅绿主题色板 */
+  --brand-50: #f1f8f4;
+  --brand-100: #e2f2e9;
+  --brand-200: #c4e6d3;
+  --brand-300: #97d2b2;
+  --brand-400: #63b88d;
+  --brand-500: #3fa672;
+  --brand-600: #2f8f5e;
+  --brand-700: #247049;
+  --brand-800: #1e593c;
+  --ink-900: #14241b;
+  --ink-800: #1d3327;
+  --ink-700: #2c4638;
+  --ink-600: #435d4f;
+  --ink-500: #5b7466;
+  --ink-400: #7c9185;
+  --line: rgba(36, 112, 73, 0.14);
+  --line-strong: rgba(36, 112, 73, 0.24);
+
+  /* 状态色（克制） */
+  --ok: #2f8f5e;
+  --ok-bg: #e3f3ea;
+  --warn: #b7791f;
+  --warn-bg: #fbf1dd;
+  --danger: #c0563f;
+  --danger-bg: #fbe7e1;
+  --info: #3f6d8e;
+  --info-bg: #e4eff6;
+  --accent: #c8861a;
+
+  /* 液态玻璃 */
+  --glass-bg: rgba(255, 255, 255, 0.62);
+  --glass-bg-strong: rgba(255, 255, 255, 0.78);
+  --glass-bg-soft: rgba(255, 255, 255, 0.42);
+  --glass-border: rgba(255, 255, 255, 0.75);
+  --glass-shadow: 0 10px 30px rgba(28, 74, 49, 0.1), 0 2px 8px rgba(28, 74, 49, 0.06);
+  --glass-shadow-lg: 0 18px 48px rgba(28, 74, 49, 0.16), 0 4px 12px rgba(28, 74, 49, 0.08);
+  --blur: blur(22px) saturate(150%);
+  --radius: 14px;
+  --radius-sm: 9px;
+  --radius-lg: 20px;
+
+  --mono: 'JetBrains Mono', 'Cascadia Code', Consolas, 'Courier New', monospace;
+  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei',
+    'Hiragino Sans GB', 'Noto Sans CJK SC', sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--sans);
+  color: var(--ink-800);
+  font-size: 13px;
+  line-height: 1.55;
+  overflow: hidden;
+  background: #e7f2eb;
+}
+
+/* 液态背景：浅绿渐变 + 柔和光斑 */
+.app-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background:
+    radial-gradient(900px 600px at 12% -8%, rgba(122, 200, 158, 0.5), transparent 60%),
+    radial-gradient(820px 560px at 100% 0%, rgba(150, 209, 178, 0.42), transparent 58%),
+    radial-gradient(1000px 720px at 50% 118%, rgba(95, 175, 132, 0.4), transparent 60%),
+    linear-gradient(160deg, #eef7f1 0%, #e0f0e7 46%, #eef6f1 100%);
+}
+.app-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(rgba(36, 112, 73, 0.05) 1px, transparent 1px);
+  background-size: 22px 22px;
+  opacity: 0.5;
+}
+
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  border-radius: var(--radius);
+}
+
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(36, 112, 73, 0.22);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(36, 112, 73, 0.38);
+  background-clip: content-box;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+button {
+  font-family: inherit;
+}
+
+code,
+pre {
+  font-family: var(--mono);
+}
+
+h1,
+h2,
+h3,
+h4 {
+  margin: 0;
+  font-weight: 650;
+  color: var(--ink-900);
+}
+
+::selection {
+  background: rgba(63, 166, 114, 0.28);
+}

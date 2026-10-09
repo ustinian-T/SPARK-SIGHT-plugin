@@ -1,0 +1,4 @@
+- insert:
+    - id: sparksight-dsh
+      name: sparksight-dsh
+      config: {}

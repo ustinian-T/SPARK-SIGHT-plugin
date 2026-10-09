@@ -1,0 +1,11 @@
+{
+  "csv": "x,y,z\n1,2,10\n2,4,8\n3,6,6\n4,8,4\n5,10,2\n",
+  "expected": {
+    "yQuantiles": { "q1": 4, "median": 6, "q3": 8 },
+    "xyCorrelation": 1,
+    "xzCorrelation": -1,
+    "yRegression": { "slope": 2, "intercept": 0, "r2": 1 },
+    "yMeanCi95": { "lower": 2.074, "upper": 9.926 },
+    "yzCohenD": 0
+  }
+}

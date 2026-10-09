@@ -1,0 +1,341 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-24T04:05:40.577Z",
+  "environment": {
+    "platform": "win32",
+    "arch": "x64",
+    "node": "v24.16.0",
+    "cpuCount": 20,
+    "totalMemoryBytes": 33752997888
+  },
+  "thresholds": {
+    "taskCompletion": 0.85,
+    "firstExecution": 0.7,
+    "repairedExecution": 0.9,
+    "roundtrip": 0.95,
+    "chartDatasets": 3,
+    "feedbackRounds": 5,
+    "previewP95Ms": 60000,
+    "renderP95Ms": 3000
+  },
+  "metrics": {
+    "taskCount": 20,
+    "completionRate": 1,
+    "firstExecutionSuccessRate": 1,
+    "afterRepairSuccessRate": 1,
+    "roundtripConsistencyRate": 1,
+    "feedbackContextRate": 1,
+    "errorClassificationRate": 1,
+    "chartCoverage": {
+      "line": 4,
+      "bar": 4,
+      "scatter": 4,
+      "heatmap": 4,
+      "panel_2x2": 4
+    },
+    "previewMs": {
+      "p50": 1262.63,
+      "p95": 1689.72
+    },
+    "renderMs": {
+      "p50": 1261.53,
+      "p95": 1688.97
+    }
+  },
+  "gates": {
+    "taskCompletion": true,
+    "firstExecution": true,
+    "repairedExecution": true,
+    "roundtrip": true,
+    "chartDatasets": true,
+    "fiveFeedbackRounds": true,
+    "previewP95": true,
+    "renderP95": true,
+    "errorSet": true
+  },
+  "passed": true,
+  "errorResults": [
+    {
+      "id": "dependency",
+      "expected": "DEPENDENCY",
+      "actual": "DEPENDENCY"
+    },
+    {
+      "id": "matlab-license",
+      "expected": "ENGINE",
+      "actual": "ENGINE"
+    },
+    {
+      "id": "memory",
+      "expected": "RESOURCE",
+      "actual": "RESOURCE"
+    },
+    {
+      "id": "font-warning",
+      "expected": "SYNTAX",
+      "actual": "SYNTAX"
+    },
+    {
+      "id": "field",
+      "expected": "FIELD",
+      "actual": "FIELD"
+    },
+    {
+      "id": "render",
+      "expected": "RENDER",
+      "actual": "RENDER"
+    },
+    {
+      "id": "timeout",
+      "expected": "RESOURCE",
+      "actual": "RESOURCE"
+    },
+    {
+      "id": "safety",
+      "expected": "SAFETY",
+      "actual": "SAFETY"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "task-01",
+      "chartType": "line",
+      "analysisOk": true,
+      "firstSuccess": true,
+      "repairedSuccess": true,
+      "roundtrip": true,
+      "feedbackRounds": 5,
+      "renderMs": 1338.92,
+      "totalMs": 1343.87,
+      "error": null
+    },
+    {
+      "id": "task-02",
+      "chartType": "line",
+      "analysisOk": true,
+      "firstSuccess": true,
+      "repairedSuccess": true,
+      "roundtrip": true,
+      "feedbackRounds": 5,
+      "renderMs": 1269.55,
+      "totalMs": 1270.74,
+      "error": null
+    },
+    {
+      "id": "task-03",
+      "chartType": "line",
+      "analysisOk": true,
+      "firstSuccess": true,
+      "repairedSuccess": true,
+      "roundtrip": true,
+      "feedbackRounds": 5,
+      "renderMs": 1276.36,
+      "totalMs": 1277.4,
+      "error": null
+    },
+    {
+      "id": "task-04",
+      "chartType": "line",
+      "analysisOk": true,
+      "firstSuccess": true,
+      "repairedSuccess": true,
+      "roundtrip": true,
+      "feedbackRounds": 5,
+      "renderMs": 1248.18,
+      "totalMs": 1249.35,
+      "error": null
+    },
+    {
+      "id": "task-05",
+      "chartType": "bar",
+      "analysisOk": true,
+      "firstSuccess": true,
+      "repairedSuccess": true,
+      "roundtrip": true,
+      "feedbackRounds": 5,
+      "renderMs": 1241.09,
+      "totalMs": 1241.84,
+      "error": null
+    },
+    {
+      "id": "task-06",
+      "chartType": "bar",
+      "analysisOk": true,
+      "firstSuccess": true,
+      "repairedSuccess": true,
+      "roundtrip": true,
+      "feedbackRounds": 5,
+      "renderMs": 1263.18,
+      "totalMs": 1263.79,
+      "error": null
+    },
+    {
+      "id": "task-07",
+      "chartType": "bar",
+      "analysisOk": true,
+      "firstSuccess": true,
+      "repairedSuccess": true,
+      "roundtrip": true,
+      "feedbackRounds": 5,
+      "renderMs": 1249.07,
+      "totalMs": 1249.95,
+      "error": null
+    },
+    {
+      "id": "task-08",
+      "chartType": "bar",
+      "analysisOk": true,
+      "firstSuccess": true,
+      "repairedSuccess": true,
+      "roundtrip": true,
+      "feedbackRounds": 5,
+      "renderMs": 1277.21,
+      "totalMs": 1278.11,
+      "error": null
+    },
+    {
+      "id": "task-09",
+      "chartType": "scatter",
+      "analysisOk": true,
+      "firstSuccess": true,
+      "repairedSuccess": true,
+      "roundtrip": true,
+      "feedbackRounds": 5,
+      "renderMs": 1235.48,
+      "totalMs": 1236.9,
+      "error": null
+    },
+    {
+      "id": "task-10",
+      "chartType": "scatter",
+      "analysisOk": true,
+      "firstSuccess": true,
+      "repairedSuccess": true,
+      "roundtrip": true,
+      "feedbackRounds": 5,
+      "renderMs": 1230.64,
+      "totalMs": 1232.51,
+      "error": null
+    },
+    {
+      "id": "task-11",
+      "chartType": "scatter",
+      "analysisOk": true,
+      "firstSuccess": true,
+      "repairedSuccess": true,
+      "roundtrip": true,
+      "feedbackRounds": 5,
+      "renderMs": 1231.5,
+      "totalMs": 1232.68,
+      "error": null
+    },
+    {
+      "id": "task-12",
+      "chartType": "scatter",
+      "analysisOk": true,
+      "firstSuccess": true,
+      "repairedSuccess": true,
+      "roundtrip": true,
+      "feedbackRounds": 5,
+      "renderMs": 1238.96,
+      "totalMs": 1239.83,
+      "error": null
+    },
+    {
+      "id": "task-13",
+      "chartType": "heatmap",
+      "analysisOk": true,
+      "firstSuccess": true,
+      "repairedSuccess": true,
+      "roundtrip": true,
+      "feedbackRounds": 5,
+      "renderMs": 1240.31,
+      "totalMs": 1240.93,
+      "error": null
+    },
+    {
+      "id": "task-14",
+      "chartType": "heatmap",
+      "analysisOk": true,
+      "firstSuccess": true,
+      "repairedSuccess": true,
+      "roundtrip": true,
+      "feedbackRounds": 5,
+      "renderMs": 1264.65,
+      "totalMs": 1265.47,
+      "error": null
+    },
+    {
+      "id": "task-15",
+      "chartType": "heatmap",
+      "analysisOk": true,
+      "firstSuccess": true,
+      "repairedSuccess": true,
+      "roundtrip": true,
+      "feedbackRounds": 5,
+      "renderMs": 1261.53,
+      "totalMs": 1262.63,
+      "error": null
+    },
+    {
+      "id": "task-16",
+      "chartType": "heatmap",
+      "analysisOk": true,
+      "firstSuccess": true,
+      "repairedSuccess": true,
+      "roundtrip": true,
+      "feedbackRounds": 5,
+      "renderMs": 1260.06,
+      "totalMs": 1261.24,
+      "error": null
+    },
+    {
+      "id": "task-17",
+      "chartType": "panel_2x2",
+      "analysisOk": true,
+      "firstSuccess": true,
+      "repairedSuccess": true,
+      "roundtrip": true,
+      "feedbackRounds": 5,
+      "renderMs": 1619.21,
+      "totalMs": 1619.99,
+      "error": null
+    },
+    {
+      "id": "task-18",
+      "chartType": "panel_2x2",
+      "analysisOk": true,
+      "firstSuccess": true,
+      "repairedSuccess": true,
+      "roundtrip": true,
+      "feedbackRounds": 5,
+      "renderMs": 1688.97,
+      "totalMs": 1689.72,
+      "error": null
+    },
+    {
+      "id": "task-19",
+      "chartType": "panel_2x2",
+      "analysisOk": true,
+      "firstSuccess": true,
+      "repairedSuccess": true,
+      "roundtrip": true,
+      "feedbackRounds": 5,
+      "renderMs": 1624.19,
+      "totalMs": 1625.32,
+      "error": null
+    },
+    {
+      "id": "task-20",
+      "chartType": "panel_2x2",
+      "analysisOk": true,
+      "firstSuccess": true,
+      "repairedSuccess": true,
+      "roundtrip": true,
+      "feedbackRounds": 5,
+      "renderMs": 1708.61,
+      "totalMs": 1709.92,
+      "error": null
+    }
+  ]
+}

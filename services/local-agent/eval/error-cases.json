@@ -1,0 +1,10 @@
+[
+  {"id":"dependency","stderr":"ModuleNotFoundError: No module named seaborn","expected":"DEPENDENCY"},
+  {"id":"matlab-license","stderr":"License Manager Error -9: License checkout failed","expected":"ENGINE"},
+  {"id":"memory","stderr":"MemoryError: cannot allocate memory","expected":"RESOURCE"},
+  {"id":"font-warning","stderr":"findfont: Font family 'SimHei' not found","expected":"SYNTAX"},
+  {"id":"field","stderr":"KeyError: 'missing_column'","expected":"FIELD"},
+  {"id":"render","stderr":"Permission denied while savefig","expected":"RENDER"},
+  {"id":"timeout","stderr":"","timedOut":true,"expected":"RESOURCE"},
+  {"id":"safety","stderr":"","safetyViolations":["network call"],"expected":"SAFETY"}
+]

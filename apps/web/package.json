@@ -1,0 +1,26 @@
+{
+  "name": "@deep-imaging/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "科研绘图辅助智能体 · 共享 Web UI（网页端 / 桌面壳 / 插件 webview 复用）",
+  "license": "SEE LICENSE IN LICENSE",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "test": "vitest",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^6.1.1",
+    "typescript": "~5.6.3",
+    "vite": "^8.3.0",
+    "vitest": "^5.0.1"
+  }
+}

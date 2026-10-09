@@ -1,0 +1,17 @@
+本目录（共享本地 Agent）适用仓库根目录的 LICENSE：
+Deep Imaging 非商业使用与署名许可 1.0（LicenseRef-Deep-Imaging-NC-Attribution-1.0）。
+
+该许可为源码可用的自定义许可，含非商业限制，不是 OSI 批准的开源许可。
+
+例外 / Exceptions:
+- src/fonts/ 下的 Noto Sans CJK SC 字体适用 SIL Open Font License 1.1，
+  见 src/fonts/OFL.txt；本项目的非商业条款不对其追加限制。
+
+This directory (the shared local Agent) is governed by the repository root
+LICENSE: the Deep Imaging Noncommercial Attribution License 1.0. It is a
+source-available license with a noncommercial restriction and is not an
+OSI-approved open source license.
+
+完整条款 / Full terms: ../../LICENSE
+范围说明 / Scope map: ../../docs/licensing.md
+第三方声明 / Third-party notices: ../../THIRD_PARTY_NOTICES.md

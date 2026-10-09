@@ -1,0 +1,22 @@
+[
+  {"id":"task-01","chartType":"line","seed":1,"rows":8},
+  {"id":"task-02","chartType":"line","seed":2,"rows":12},
+  {"id":"task-03","chartType":"line","seed":3,"rows":20},
+  {"id":"task-04","chartType":"line","seed":4,"rows":30},
+  {"id":"task-05","chartType":"bar","seed":5,"rows":6},
+  {"id":"task-06","chartType":"bar","seed":6,"rows":8},
+  {"id":"task-07","chartType":"bar","seed":7,"rows":10},
+  {"id":"task-08","chartType":"bar","seed":8,"rows":12},
+  {"id":"task-09","chartType":"scatter","seed":9,"rows":15},
+  {"id":"task-10","chartType":"scatter","seed":10,"rows":20},
+  {"id":"task-11","chartType":"scatter","seed":11,"rows":30},
+  {"id":"task-12","chartType":"scatter","seed":12,"rows":40},
+  {"id":"task-13","chartType":"heatmap","seed":13,"rows":15},
+  {"id":"task-14","chartType":"heatmap","seed":14,"rows":20},
+  {"id":"task-15","chartType":"heatmap","seed":15,"rows":30},
+  {"id":"task-16","chartType":"heatmap","seed":16,"rows":40},
+  {"id":"task-17","chartType":"panel_2x2","seed":17,"rows":10},
+  {"id":"task-18","chartType":"panel_2x2","seed":18,"rows":15},
+  {"id":"task-19","chartType":"panel_2x2","seed":19,"rows":20},
+  {"id":"task-20","chartType":"panel_2x2","seed":20,"rows":30}
+]

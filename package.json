@@ -1,0 +1,36 @@
+{
+  "name": "spark-sight-plugin",
+  "version": "0.1.0",
+  "private": true,
+  "description": "灵感视界 SPARK SIGHT · Deep Imaging — VS Code 扩展与 DeepSeek Harness 插件源码",
+  "license": "SEE LICENSE IN LICENSE",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ustinian-T/SPARK-SIGHT-plugin.git"
+  },
+  "homepage": "https://github.com/ustinian-T/SPARK-SIGHT-plugin#readme",
+  "bugs": {
+    "url": "https://github.com/ustinian-T/SPARK-SIGHT-plugin/issues"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "check:secrets": "node scripts/check-secrets.mjs",
+    "check:contract": "node scripts/check-contract.mjs",
+    "check": "npm run check:secrets && npm run check:contract",
+    "install:all": "npm --prefix apps/web install && npm --prefix apps/vscode install",
+    "build:web": "npm --prefix apps/web run build",
+    "build:vscode": "npm --prefix apps/vscode run build",
+    "build": "npm run build:web && npm run build:vscode",
+    "test:web": "npm --prefix apps/web test -- --run",
+    "test:vscode": "npm --prefix apps/vscode test",
+    "test:agent": "npm --prefix services/local-agent test",
+    "test": "npm run test:agent && npm run test:web && npm run test:vscode",
+    "prepare:vscode": "npm --prefix apps/vscode run vscode:prepublish",
+    "prepare:dsh": "npm --prefix apps/dsh run prepare:package",
+    "sbom": "node scripts/generate-sbom.mjs",
+    "migrate:projects": "node scripts/migrate-to-projects.mjs",
+    "start:agent": "npm --prefix services/local-agent start"
+  }
+}
