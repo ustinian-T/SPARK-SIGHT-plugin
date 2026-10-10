@@ -46,6 +46,12 @@ const VIEW_TITLE: Record<MainView, string> = {
 }
 
 export function App() {
+  const embedded = !!window.__SPARK_VSCODE__
+  const [nativeError, setNativeError] = useState('')
+  const nativeAction = async (action: (() => Promise<unknown>) | undefined) => {
+    setNativeError('')
+    try { await action?.() } catch (error) { setNativeError(error instanceof Error ? error.message : String(error)) }
+  }
   const [settingsOpen, setSettingsOpen] = useState(false)
   const { state, setView, setActivePlan, toggleConsole, choosePlan, start, proposePatch } = useStore()
   const task = state.task
@@ -197,9 +203,18 @@ export function App() {
     <>
       {settingsOpen && <ModelSettingsPanel close={() => setSettingsOpen(false)} />}
       <div className="app-bg" />
-      <div className={`app ${leftOpen ? '' : 'app--sidebar-collapsed'}`}>
-        <TitleBar />
-        <ActivityBar onOpenSettings={() => setSettingsOpen(true)} />
+      <div className={`app ${embedded ? 'app--vscode' : ''} ${leftOpen ? '' : 'app--sidebar-collapsed'}`}>
+        {!embedded && <TitleBar />}
+        {!embedded && <ActivityBar onOpenSettings={() => setSettingsOpen(true)} />}
+        {embedded && <header className="spark-toolbar">
+          <select aria-label="切换工作区" value={state.mainView} onChange={event => setView(event.target.value as MainView)}>
+            {Object.entries(VIEW_TITLE).map(([value,label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+          <button onClick={() => setPane(!leftOpen)} title="项目与数据">项目</button>
+          <button onClick={() => void nativeAction(window.__SPARK_VSCODE__?.useSelection)} title="使用 VS Code 选中的代码">选中代码</button>
+          <button onClick={() => void nativeAction(window.__SPARK_VSCODE__?.runCurrent)} title="在 VS Code 中运行当前脚本">运行</button>
+          <button onClick={() => setSettingsOpen(true)} title="模型设置">设置</button>
+        </header>}
         <Sidebar />
         {leftOpen && <button className="layout-backdrop" aria-label="关闭侧栏" onClick={() => setPane(false)} />}
 
@@ -215,6 +230,7 @@ export function App() {
             </span>
           </div>
 
+          {nativeError && <div className="notebox notebox--warn" role="alert">{nativeError}</div>}
           <div className="view-body">
             {blocked ? (
               <GateBlock />

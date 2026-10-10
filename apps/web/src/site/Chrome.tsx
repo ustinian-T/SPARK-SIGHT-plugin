@@ -11,8 +11,8 @@ export const COPYRIGHT = '© 2026 SPARK SIGHT contributors'
 
 export function BrandMark({ compact = false }: { compact?: boolean }) {
   return (
-    <a className="sd-brand" href="#/" onClick={(e) => { e.preventDefault(); navigate('/') }}>
-      <img src="/logo-dark.png" alt="灵感视界 SPARK SIGHT" />
+    <a className="sd-brand" href="#/" onClick={(e) => { e.preventDefault(); if (window.__SPARK_VSCODE__) void window.__SPARK_VSCODE__.openWebsite(); else navigate('/') }}>
+      <img src="./logo-dark.png" alt="灵感视界 SPARK SIGHT" />
       <span>
         <span className="sd-brand__cn">灵感视界</span>
         {!compact && <small>SPARK SIGHT</small>}

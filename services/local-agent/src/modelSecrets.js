@@ -58,6 +58,6 @@ export class ModelSecretStore {
 
 export function modelConfigSummary(config) {
   return config
-    ? { configured: true, provider: config.provider, protocol: config.protocol, baseUrl: config.baseUrl, model: config.model }
+    ? { configured: !!config.apiKey, providerId: config.providerId, displayName: config.displayName, models: config.models, provider: config.provider, protocol: config.protocol, baseUrl: config.baseUrl, model: config.model }
     : { configured: false }
 }

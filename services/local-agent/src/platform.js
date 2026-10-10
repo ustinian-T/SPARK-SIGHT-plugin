@@ -50,8 +50,12 @@ export class IdentityStore {
       if (user.status === undefined) user.status = 'active'
       if (user.tokenVersion === undefined) user.tokenVersion = 1
       if (user.phone === undefined) user.phone = ''
-      if (!user.modelAccess) user.modelAccess = { allowOwn: false, allowShared: false }
-      if (!user.modelSource) user.modelSource = 'none'
+      if (!user.modelAccess) user.modelAccess = { allowOwn: true, allowShared: false }
+      if (user.role !== 'admin') {
+        user.modelAccess.allowShared = false
+        if (user.modelSource === 'shared') user.modelSource = user.modelAccess.allowOwn ? 'own' : 'none'
+      }
+      if (!user.modelSource) user.modelSource = user.modelAccess.allowOwn ? 'own' : 'none'
       if (!Array.isArray(user.sessions)) user.sessions = []
     }
   }
@@ -106,7 +110,7 @@ export class IdentityStore {
     return pbkdf2Sync(String(password), salt, 210_000, 32, 'sha256').toString('base64url')
   }
   // bootstrap 用于系统引导的内置管理员（如默认名 admin），豁免 6 位下限但不豁免字符集约束
-  register({ username, password, displayName, phone, role = 'user', status = 'active', bootstrap = false, adminProvisioned = false, protected: isProtected = false, agreementAccepted = false, agreementVersion = '', modelAccess = { allowOwn: false, allowShared: false } }) {
+  register({ username, password, displayName, phone, role = 'user', status = 'active', bootstrap = false, adminProvisioned = false, protected: isProtected = false, agreementAccepted = false, agreementVersion = '', modelAccess = { allowOwn: true, allowShared: false } }) {
     const check = bootstrap ? validateUsername(username, { minimumLength: 1 }) : validateUsername(username)
     if (!check.ok) throw new ApiError(400, ERR.AUTH_INVALID, check.reason)
     const normalized = check.normalized
@@ -128,7 +132,7 @@ export class IdentityStore {
       protected: isProtected === true,
       // 留存同意证据：协议版本与同意时间，用于合规审计（不冗余保存协议正文）。
       agreementVersion: adminProvisioned || bootstrap ? '' : String(agreementVersion ?? '').slice(0, 24), agreedAt: adminProvisioned || bootstrap ? null : now(),
-      modelAccess: role === 'admin' ? { allowOwn: false, allowShared: false } : { allowOwn: modelAccess.allowOwn, allowShared: modelAccess.allowShared }, modelSource: 'none', sessions: [], lastLoginAt: null, lastLogoutAt: null
+      modelAccess: role === 'admin' ? { allowOwn: false, allowShared: false } : { allowOwn: modelAccess.allowOwn, allowShared: false }, modelSource: role !== 'admin' && modelAccess.allowOwn ? 'own' : 'none', sessions: [], lastLoginAt: null, lastLogoutAt: null
     }
     this.state.users.push(user)
     this.persist()
@@ -212,7 +216,8 @@ export class IdentityStore {
           typeof patch.modelAccess.allowOwn !== 'boolean' || typeof patch.modelAccess.allowShared !== 'boolean') {
         throw new ApiError(400, ERR.BAD_REQUEST, '模型权限须明确指定是否允许自填及使用统一配置')
       }
-      user.modelAccess = { allowOwn: patch.modelAccess.allowOwn, allowShared: patch.modelAccess.allowShared }
+      if (patch.modelAccess.allowShared) throw new ApiError(403, ERR.FORBIDDEN, '公开测试期间不开放统一模型配置')
+      user.modelAccess = { allowOwn: patch.modelAccess.allowOwn, allowShared: false }
       if ((user.modelSource === 'own' && !user.modelAccess.allowOwn) ||
           (user.modelSource === 'shared' && !user.modelAccess.allowShared)) user.modelSource = 'none'
     }
@@ -231,7 +236,7 @@ export class IdentityStore {
     if (!user) throw new ApiError(404, ERR.NOT_FOUND, '用户不存在')
     if (!['none', 'own', 'shared'].includes(source)) throw new ApiError(400, ERR.BAD_REQUEST, '无效的模型来源')
     if (source === 'own' && user.role !== 'admin' && !user.modelAccess?.allowOwn) throw new ApiError(403, ERR.FORBIDDEN, '未获自填 API 授权')
-    if (source === 'shared' && user.role !== 'admin' && !user.modelAccess?.allowShared) throw new ApiError(403, ERR.FORBIDDEN, '未获统一 API 授权')
+    if (source === 'shared' && user.role !== 'admin') throw new ApiError(403, ERR.FORBIDDEN, '公开测试期间不开放统一模型配置')
     user.modelSource = source
     this.persist()
     return source

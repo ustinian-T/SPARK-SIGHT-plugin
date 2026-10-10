@@ -275,6 +275,12 @@ export interface HostBridge {
 
 declare global {
   interface Window {
+    __SPARK_VSCODE__?: {
+      openSource(input: {engine:string;source:string}): Promise<{uri:string}>
+      runCurrent(): Promise<unknown>
+      useSelection(): Promise<unknown>
+      openWebsite(): Promise<unknown>
+    }
     __DEEP_IMAGING_HOST__?: HostBridge
     __TAURI__?: { core?: { invoke?: (command: string, args?: Record<string, unknown>) => Promise<unknown> } }
   }

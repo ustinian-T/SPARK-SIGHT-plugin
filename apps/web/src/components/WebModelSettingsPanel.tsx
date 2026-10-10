@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { defaultModelSettings, endpointForProtocol, type ModelSettings } from '../client/modelSettings'
+import { defaultModelSettings, type ModelSettings } from '../client/modelSettings'
 import { loadSession, siteApi } from '../site/session'
 import { Button } from './common'
+import { ModelProviderFields } from './ModelProviderFields'
 
 type Summary = { configured: boolean; provider?: ModelSettings['provider']; protocol?: ModelSettings['protocol']; baseUrl?: string; model?: string }
 type Access = {
@@ -71,7 +72,7 @@ export function WebModelSettingsPanel({ close }: { close: () => void }) {
   return <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: '#0008', display: 'grid', placeItems: 'center' }}>
     <section role="dialog" aria-modal="true" aria-label="模型 API 设置" className="platform-panel" style={{ background: 'var(--paper, #fff)', width: 'min(480px, 94vw)', padding: 24, borderRadius: 12, maxHeight: '88vh', overflowY: 'auto' }}>
       <h2>模型 API 设置</h2>
-      <p>网页端由本站服务器调用模型 API。管理员可授权使用统一配置，或允许您保存个人配置；密钥不会保存在浏览器。</p>
+      <p>网页端由本站服务器调用模型 API。公开测试期间仅开放个人配置，统一配置不向普通用户开放；密钥不会保存在浏览器。</p>
       {access && <>
         <label className="form-label" htmlFor="model-source">任务使用的模型来源</label>
         <select id="model-source" className="form-control" value={access.source} disabled={busy} onChange={(event) => void choose(event.target.value as Access['source'])}>
@@ -82,21 +83,7 @@ export function WebModelSettingsPanel({ close }: { close: () => void }) {
         {!access.permissions.allowOwn && !access.permissions.allowShared && <p>管理员尚未授权模型 API；仍可使用不依赖模型的绘图流程。</p>}
         {access.permissions.allowOwn && <>
           <h3>我的 API 配置</h3>
-          <label className="form-label" htmlFor="model-protocol">接口类型</label>
-          <select id="model-protocol" className="form-control" value={settings.protocol} onChange={(event) => {
-            const protocol = event.target.value as ModelSettings['protocol']
-            setSettings({ ...settings, protocol, provider: protocol === 'anthropic_messages' ? 'anthropic' : 'openai', baseUrl: endpointForProtocol(protocol, settings.baseUrl) })
-          }}>
-            <option value="responses">OpenAI Responses</option><option value="chat_completions">OpenAI Chat Completions</option><option value="anthropic_messages">Anthropic Messages</option>
-          </select>
-          <label className="form-label" htmlFor="model-base-url">API 地址</label>
-          <input id="model-base-url" className="form-control" value={settings.baseUrl} onChange={(event) => setSettings({ ...settings, baseUrl: event.target.value })} />
-          <label className="form-label" htmlFor="model-name">模型</label>
-          <input id="model-name" className="form-control" value={settings.model} onChange={(event) => setSettings({ ...settings, model: event.target.value })} />
-          <label className="form-label" htmlFor="model-key">API Key</label>
-          <input id="model-key" className="form-control" type="password" autoComplete="off" value={settings.apiKey}
-            placeholder={access.own.configured ? '已保存；留空保持原密钥' : '填写 API Key'}
-            onChange={(event) => setSettings({ ...settings, apiKey: event.target.value })} />
+          <ModelProviderFields settings={settings} change={setSettings} disabled={busy} />
         </>}
       </>}
       <p role="status">{message}</p>

@@ -106,6 +106,10 @@ export class SidecarManager {
     // M3：以本地单机模式运行 sidecar——禁用云同步/远程分享、关闭测试模式、
     // 打开文件态持久化；保留 MATLAB 等本机引擎发现结果（与 vscode 扩展一致）。
     env.LOCAL_ONLY_MODE = '1'
+    env.LOCAL_AGENT_HOST = '127.0.0.1'
+    env.LOCAL_AGENT_PORT = String(this.config.port || 0)
+    delete env.LOCAL_AGENT_TOKEN
+    env.LOCAL_AGENT_WEB_ONLY = '0'
     env.REMOTE_MODE = '0'
     env.TEST_WEB_MODE = '0'
     env.LOCAL_AGENT_PERSIST = '1'

@@ -54,7 +54,7 @@ const FIXTURES = [
   '13800138000', '13900139000', '13900139001', '13700137000'
 ]
 
-const neutralize = (text) => FIXTURES.reduce((out, literal) => out.replaceAll(literal, '<fixture>'), text)
+const neutralize = (text) => FIXTURES.reduce((out, literal) => out.replaceAll(literal, '<fixture>'), text.replaceAll('spark_sight@163.com', '<public-support>'))
 
 function collectFiles() {
   try {

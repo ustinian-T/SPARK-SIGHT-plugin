@@ -1,3 +1,4 @@
+import { loadReleaseConfig } from './releaseConfig'
 import { createHash } from 'node:crypto'
 import { request } from 'node:https'
 
@@ -7,7 +8,7 @@ import { request } from 'node:https'
  * private infrastructure is published. Builds that publish their own VSIX set
  * DEEP_IMAGING_UPDATE_ORIGIN to their own HTTPS release host.
  */
-export const UPDATE_ORIGIN = process.env.DEEP_IMAGING_UPDATE_ORIGIN || 'https://updates.example.com'
+export const UPDATE_ORIGIN = process.env.DEEP_IMAGING_UPDATE_ORIGIN || loadReleaseConfig().updateOrigin
 export const ARTIFACT_NAME = 'Deep-Imaging-VSCode-Windows-x64.vsix'
 export interface ReleaseFile { name: string; bytes: number; sha256: string }
 export interface Release { version: string; file: ReleaseFile }

@@ -1,7 +1,23 @@
 {
   "name": "deep-imaging-vscode",
-  "displayName": "Deep Imaging",
-  "version": "0.1.2",
+  "displayName": "spark sight",
+  "description": "科研绘图助手：在 VS Code 中导入数据、生成和比较图表方案、审阅代码并导出可复现结果。",
+  "categories": [
+    "Visualization",
+    "Other"
+  ],
+  "keywords": [
+    "scientific visualization",
+    "charts",
+    "research",
+    "python",
+    "data analysis"
+  ],
+  "homepage": "https://github.com/ustinian-T/SPARK-SIGHT-plugin#readme",
+  "bugs": {
+    "url": "https://github.com/ustinian-T/SPARK-SIGHT-plugin/issues"
+  },
+  "version": "0.1.4",
   "private": true,
   "engines": {
     "vscode": "^1.95.0"
@@ -13,85 +29,101 @@
     "onCommand:deepImaging.open",
     "onCommand:deepImaging.startAgent",
     "onCommand:deepImaging.runMatlab",
-    "onCommand:deepImaging.runCurrentFile"
+    "onCommand:deepImaging.runCurrentFile",
+    "onView:deepImaging.sidebar"
   ],
   "contributes": {
     "commands": [
       {
         "command": "deepImaging.open",
-        "title": "Deep Imaging: Open"
+        "title": "spark sight: Open"
       },
       {
         "command": "deepImaging.startAgent",
-        "title": "Deep Imaging: Start Local Agent"
+        "title": "spark sight: Start Local Agent"
       },
       {
         "command": "deepImaging.stopAgent",
-        "title": "Deep Imaging: Stop Local Agent"
+        "title": "spark sight: Stop Local Agent"
       },
       {
         "command": "deepImaging.reviewPatch",
-        "title": "Deep Imaging: Review Patch"
+        "title": "spark sight: Review Patch"
       },
       {
         "command": "deepImaging.openData",
-        "title": "Deep Imaging: Open CSV / Excel / JSON"
+        "title": "spark sight: Open CSV / Excel / JSON"
       },
       {
         "command": "deepImaging.useSelection",
-        "title": "Deep Imaging: Use Editor Selection"
+        "title": "spark sight: Use Editor Selection",
+        "icon": "$(insert)"
       },
       {
         "command": "deepImaging.generateVariants",
-        "title": "Deep Imaging: Generate Two Variants"
+        "title": "spark sight: Generate Two Variants"
       },
       {
         "command": "deepImaging.syncProject",
-        "title": "Deep Imaging: Sync Project"
+        "title": "spark sight: Sync Project"
       },
       {
         "command": "deepImaging.exportAdvanced",
-        "title": "Deep Imaging: Advanced Export"
+        "title": "spark sight: Advanced Export"
       },
       {
         "command": "deepImaging.showDiagnostics",
-        "title": "Deep Imaging: Show Diagnostics"
+        "title": "spark sight: Show Diagnostics"
       },
       {
         "command": "deepImaging.generate",
-        "title": "Deep Imaging: Generate Three Plans"
+        "title": "spark sight: Generate Three Plans"
       },
       {
         "command": "deepImaging.fix",
-        "title": "Deep Imaging: Fix Current Chart"
+        "title": "spark sight: Fix Current Chart"
       },
       {
         "command": "deepImaging.preview",
-        "title": "Deep Imaging: Preview Chart"
+        "title": "spark sight: Preview Chart"
       },
       {
         "command": "deepImaging.compare",
-        "title": "Deep Imaging: Compare Three Plans"
+        "title": "spark sight: Compare Three Plans"
       },
       {
         "command": "deepImaging.export",
-        "title": "Deep Imaging: Export Reproducible Bundle"
+        "title": "spark sight: Export Reproducible Bundle"
       },
       {
         "command": "deepImaging.preferences",
-        "title": "Deep Imaging: Manage Preferences"
+        "title": "spark sight: Manage Preferences"
       },
       {
         "command": "deepImaging.runMatlab",
-        "title": "Deep Imaging: Run Current MATLAB Script"
+        "title": "spark sight: Run Current MATLAB Script"
       },
       {
         "command": "deepImaging.runCurrentFile",
-        "title": "Deep Imaging: Run Current Python / R / MATLAB / Node File"
+        "title": "spark sight: Run Current Python / R / MATLAB / Node File",
+        "icon": "$(play)"
       },
       {
         "command": "deepImaging.checkUpdates",
-        "title": "Deep Imaging: Check for Updates"
+        "title": "spark sight: Check for Updates"
+      },
+      {
+        "command": "deepImaging.openSource",
+        "title": "spark sight: Open Generated Code in Editor"
+      },
+      {
+        "command": "deepImaging.openWebsite",
+        "title": "spark sight: Open Website"
+      },
+      {
+        "command": "deepImaging.runInTerminal",
+        "title": "spark sight: Run Current File in VS Code Terminal",
+        "icon": "$(play)"
       }
     ],
     "keybindings": [
@@ -136,6 +168,18 @@
           "when": "resourceExtname == .csv || resourceExtname == .xlsx || resourceExtname == .json",
           "group": "navigation@9"
         }
+      ],
+      "view/title": [
+        {
+          "command": "deepImaging.runInTerminal",
+          "when": "view == deepImaging.sidebar",
+          "group": "navigation"
+        },
+        {
+          "command": "deepImaging.useSelection",
+          "when": "view == deepImaging.sidebar",
+          "group": "navigation"
+        }
       ]
     },
     "configuration": {
@@ -147,6 +191,24 @@
           "description": "Path to a user-licensed local MATLAB executable."
         }
       }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "sparkSight",
+          "title": "spark sight",
+          "icon": "media/activity.svg"
+        }
+      ]
+    },
+    "views": {
+      "sparkSight": [
+        {
+          "type": "webview",
+          "id": "deepImaging.sidebar",
+          "name": "spark sight"
+        }
+      ]
     }
   },
   "scripts": {
@@ -162,7 +224,7 @@
     "vitest": "^5.0.1"
   },
   "publisher": "ustinian-T",
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE.txt",
   "repository": {
     "type": "git",
     "url": "https://github.com/ustinian-T/SPARK-SIGHT-plugin.git"

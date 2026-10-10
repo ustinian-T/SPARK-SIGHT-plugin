@@ -5,7 +5,7 @@ import http from 'node:http'
 import fs from 'node:fs'
 import path from 'node:path'
 import { EventEmitter } from 'node:events'
-import { randomBytes, randomUUID } from 'node:crypto'
+import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { URL, fileURLToPath } from 'node:url'
 import { ingestFile } from './csv.js'
 import { parseMultipart, readBody, MultipartError } from './multipart.js'
@@ -33,6 +33,8 @@ import { AuthManager } from './auth.js'
 import { RateLimiter } from './rateLimit.js'
 import { UploadStore } from './uploads.js'
 import { validateModelSettings } from './modelSettings.js'
+import { fetchModelCatalog } from './providerFetch.js'
+import { providerConfig } from './llm.js'
 import { ModelSecretStore, modelConfigSummary } from './modelSecrets.js'
 import { CloudAccountClient } from './cloudAccounts.js'
 import { UserProfileStore } from './userProfileStore.js'
@@ -145,7 +147,7 @@ export function createServer(options = {}) {
       res.removeHeader('X-Frame-Options')
       res.setHeader(
         'Content-Security-Policy',
-        "frame-ancestors 'self' dsh-app: vscode-webview: https://*.vscode-webview.net"
+        `default-src 'self'; script-src 'self' 'sha256-${createHash('sha256').update(HOST_BRIDGE_BOOTSTRAP).digest('base64')}'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' ws://127.0.0.1:* http://127.0.0.1:*; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self' dsh-app: vscode-webview: https://*.vscode-webview.net`
       )
       let payload = fs.readFileSync(file)
       if (ext === '.html') payload = injectHostBootstrap(payload.toString('utf8'))
@@ -182,6 +184,19 @@ export function createServer(options = {}) {
     try { projectBus.emit('project', payload) } catch { /* 广播不阻断主流程 */ }
   }
   const preferenceStore = new PreferenceStore(storage)
+  const tenantPreferences = new Map()
+  const preferencesFor = (tenantId = 'local') => {
+    if (tenantId === 'local') return preferenceStore
+    if (!tenantPreferences.has(tenantId)) {
+      const target = path.join(path.dirname(localSettingsPath), `preferences-${Buffer.from(tenantId).toString('hex')}.json`)
+      tenantPreferences.set(tenantId, new PreferenceStore({
+        loadPreferences: () => fs.existsSync(target) ? readLocalJson(target) : { paused: false, events: [] },
+        savePreferences: value => writeLocalJson(target, value)
+      }))
+    }
+    return tenantPreferences.get(tenantId)
+  }
+
   const formatRegistry = options.formatRegistry ?? createDefaultFormatRegistry()
   const bundleStore = options.bundleStore ?? new BundleStore()
   const identityStore = options.identityStore ?? new IdentityStore({ root: storage?.root ?? null, secret: options.authSecret ?? process.env.LOCAL_AGENT_AUTH_SECRET ?? token })
@@ -199,6 +214,8 @@ export function createServer(options = {}) {
   const authManager = new AuthManager({ secret: remoteConfig.secret || randomBytes(32).toString('hex'), sessionTtlMs: remoteConfig.sessionTtlMs })
   const rateLimiter = new RateLimiter(remoteConfig.rateLimit)
   const uploadStore = new UploadStore(path.join(dataDir, 'uploads'), { maxBytes })
+  const uploadCleanupTimer = setInterval(() => uploadStore.cleanup(), 15 * 60 * 1000)
+  uploadCleanupTimer.unref()
 
   const store = new TaskStore({ storage, projectStore })
   const restored = store.restore()
@@ -217,9 +234,10 @@ export function createServer(options = {}) {
     const adminPassword = configuredPassword ?? randomBytes(24).toString('base64url')
     try {
       identityStore.register({ username: adminUsername, password: adminPassword, displayName: '管理员', role: 'admin', status: 'active', bootstrap: true, protected: true })
-      process.stdout.write(configuredPassword === undefined
-        ? `[auth] 已创建初始管理员账户：${adminUsername} / ${adminPassword}（仅显示一次，请安全保存并尽快修改）\n`
-        : `[auth] 已创建初始管理员账户：${adminUsername}（密码由环境变量提供，不写入日志）\n`)
+      if (configuredPassword === undefined && storage?.root) {
+        fs.writeFileSync(path.join(storage.root, 'admin-bootstrap.local'), JSON.stringify({ username: adminUsername, password: adminPassword }), { mode: 0o600, flag: 'wx' })
+      }
+      process.stdout.write('[auth] 初始管理员已创建；凭据不写入日志。请设置 LOCAL_AGENT_ADMIN_PASSWORD，或从受保护的数据目录读取 admin-bootstrap.local 后立即修改密码并删除该文件。\n')
     } catch (error) {
       process.stderr.write(`[auth] 初始管理员创建失败：${error.message}\n`)
     }
@@ -290,7 +308,7 @@ export function createServer(options = {}) {
   // default, but do not silently discard an explicitly supplied adapter.
   const localSandbox = options.runSandbox ?? createSandboxRunner()
   const runSandbox = (request) => remoteNodes.execute(request, localSandbox)
-  const orchestrator = new Orchestrator(store, { stepDelayMs, storage, preferenceStore, probeEngines: options.probeEngines, runSandbox, getUserProfile: async (task) => cloudAccounts && task.tenantId !== 'local' ? (await cloudAccounts.profileForIdentity({ userId: task.tenantId })).profile : userProfiles.get(task.tenantId).profile })
+  const orchestrator = new Orchestrator(store, { stepDelayMs, storage, preferenceStore, getPreferenceStore: task => preferencesFor(task.tenantId), modelFetch: options.modelFetch, probeEngines: options.probeEngines, runSandbox, getUserProfile: async (task) => cloudAccounts && task.tenantId !== 'local' ? (await cloudAccounts.profileForIdentity({ userId: task.tenantId })).profile : userProfiles.get(task.tenantId).profile })
   const backgroundOperations = new Set()
   const runBackground = (operation) => {
     const pending = Promise.resolve().then(operation)
@@ -303,6 +321,7 @@ export function createServer(options = {}) {
     res.writeHead(status, {
       'content-type': 'application/json; charset=utf-8',
       'x-agent-protocol': String(PROTOCOL_VERSION),
+      'cache-control': 'no-store',
       ...(extraHeaders || {})
     })
     res.end(JSON.stringify(obj))
@@ -316,6 +335,7 @@ export function createServer(options = {}) {
     const agentToken = req.headers['x-agent-token']
     if (bearer === token || agentToken === token) {
       const delegated = req.headers['x-user-token'] ? (identityStore.verify(String(req.headers['x-user-token'])) ?? cloudAccounts?.verify(String(req.headers['x-user-token']))) : null
+      if (req.headers['x-user-token'] && !delegated) throw new ApiError(401, ERR.UNAUTHORIZED, '用户会话无效')
       return delegated ?? { userId: 'local-user', kind: 'local', displayName: '本机用户' }
     }
     return identityStore.verify(bearer) ?? cloudAccounts?.verify(bearer)
@@ -335,15 +355,15 @@ export function createServer(options = {}) {
   }
 
   const modelPermissions = (identity) => {
-    const account = identity?.kind === 'account' ? identityStore.findUser(identity.userId) : null
+    const account = identity?.kind === 'account' ? identityStore.findUser(identity.userId) ?? identity : null
     return {
       allowOwn: account?.role === 'admin' || account?.modelAccess?.allowOwn === true,
-      allowShared: account?.role === 'admin' || account?.modelAccess?.allowShared === true
+      allowShared: account?.role === 'admin'
     }
   }
   const modelConfigForIdentity = (identity) => {
     // Desktop and VS Code keep their own local Agent/model settings.
-    if (!remoteEnabled && !testWeb && !publicWeb) return undefined
+    if (!remoteEnabled && !testWeb && !publicWeb) return localModelConfig(identity) ?? (identity?.kind === 'local' ? providerConfig() : { apiKey: '', baseUrl: '' })
     if (identity?.kind !== 'account') return { apiKey: '', baseUrl: '' }
     const account = identityStore.findUser(identity.userId)
     const permissions = modelPermissions(identity)
@@ -363,6 +383,16 @@ export function createServer(options = {}) {
   const requireModelAccount = (identity) => {
     if (identity?.kind !== 'account') throw new ApiError(403, ERR.FORBIDDEN, '请先登录账号')
   }
+  // Per-account local vault. Plaintext legacy settings are migrated only to the
+  // host identity; never transfer another person's key to a newly logged-in user.
+  const localModels = new ModelSecretStore(path.dirname(localSettingsPath), { prefix: 'local-model-secrets' })
+  const legacy = readLocalJson(localSettingsPath)
+  if (legacy.model) {
+    if (!localModels.getUser('local-user')) localModels.setUser('local-user', legacy.model)
+    delete legacy.model
+    writeLocalJson(localSettingsPath, legacy)
+  }
+  const localModelConfig = identity => localModels.getUser(identity.userId)
   const validatedSecretConfig = async (input, existing) => {
     if (!input || typeof input !== 'object') throw new ApiError(400, ERR.BAD_REQUEST, '模型配置无效')
     const apiKey = typeof input.apiKey === 'string' && input.apiKey.length ? input.apiKey : existing?.apiKey
@@ -402,6 +432,18 @@ export function createServer(options = {}) {
   // 否则服务关闭/测试结束后升级 socket 残留导致事件循环不退出。
   const wsConns = new Set()
   const upgradedSockets = new Set()
+  const authAttempts = new Map()
+  const limitAuth = (req, action, username = '') => {
+    const timestamp = Date.now()
+    for (const [key, entry] of authAttempts) if (timestamp >= entry.resetAt) authAttempts.delete(key)
+    const key = `${req.socket.remoteAddress}:${action}:${String(username).trim().toLowerCase().slice(0, 64)}`
+    let entry = authAttempts.get(key)
+    if (!entry) {
+      if (authAttempts.size >= 10000) throw new ApiError(429, 'RATE_LIMITED', '登录请求过多，请稍后重试')
+      entry = { count: 0, resetAt: timestamp + 60000 }; authAttempts.set(key, entry)
+    }
+    if (++entry.count > (action === 'register' ? 10 : action === 'login-ip' ? 60 : 20)) throw new ApiError(429, 'RATE_LIMITED', '请求过于频繁，请一分钟后重试')
+  }
 
   const server = http.createServer(async (req, res) => {
     try {
@@ -469,6 +511,7 @@ export function createServer(options = {}) {
         return sendJson(res, 200, identityStore.isUsernameAvailable(url.searchParams.get('username')))
       }
       if (method === 'POST' && pathName === '/api/auth/register') {
+        limitAuth(req, 'register')
         const body = await readJson(req)
         const inviteCode = String(body.inviteCode ?? '').trim()
         if (inviteCode) inviteStore.assertAvailable(inviteCode)
@@ -486,7 +529,12 @@ export function createServer(options = {}) {
         if (!requiresApproval) return sendJson(res, 201, result)
         return sendJson(res, 202, { user: result.user, pendingApproval: true })
       }
-      if (method === 'POST' && pathName === '/api/auth/login') return sendJson(res, 200, cloudAccounts ? await cloudAccounts.login(await readJson(req)) : identityStore.login(await readJson(req)))
+      if (method === 'POST' && pathName === '/api/auth/login') {
+        limitAuth(req, 'login-ip')
+        const body = await readJson(req)
+        limitAuth(req, 'login', body.username)
+        return sendJson(res, 200, cloudAccounts ? await cloudAccounts.login(body) : identityStore.login(body))
+      }
       if (method === 'GET' && pathName === '/api/auth/local-session') {
         if (req.headers.authorization !== `Bearer ${token}` || webOnlyEngines) throw new ApiError(401, ERR.UNAUTHORIZED, '需要本机启动令牌')
         return sendJson(res, 200, { session: cloudAccounts?.resume() ?? null })
@@ -528,6 +576,7 @@ export function createServer(options = {}) {
       }
 
       if (testWeb && method === 'GET' && pathName === '/api/test/config') {
+        if (remoteEnabled || publicWeb) throw new ApiError(403, ERR.FORBIDDEN, '公网服务禁止暴露测试令牌')
         res.setHeader('Cache-Control', 'no-store')
         return sendJson(res, 200, { token })
       }
@@ -547,6 +596,13 @@ export function createServer(options = {}) {
         return jsonError(res, new ApiError(401, ERR.UNAUTHORIZED, '缺少或无效的服务/用户令牌'), {
           protocolVersion: PROTOCOL_VERSION
         })
+      }
+
+      const preferenceStore = preferencesFor(principal.tenantId)
+      const guardedTaskId = /^\/api\/tasks\/([A-Za-z0-9_-]+)(?:\/|$)/.exec(pathName)?.[1]
+      if (guardedTaskId && principal.tenantId !== 'local') {
+        const task = store.get(guardedTaskId)
+        if (task && task.tenantId !== principal.tenantId) throw new ApiError(404, ERR.TASK_NOT_FOUND, '任务不存在')
       }
       if (pathName === '/api/auth/logout' && method === 'POST') {
         requireModelAccount(identity)
@@ -568,11 +624,20 @@ export function createServer(options = {}) {
 
       if (pathName === '/api/local/settings' || pathName === '/api/local/ui') {
         if (remoteEnabled || testWeb || publicWeb) throw new ApiError(403, ERR.BAD_REQUEST, '此接口仅供本地客户端使用')
-        const target = pathName.endsWith('/settings') ? localSettingsPath : localUiPath
-        if (method === 'GET') return sendJson(res, 200, readLocalJson(target))
+        const target = pathName.endsWith('/settings') ? localSettingsPath : identity.kind === 'local' ? localUiPath : path.join(path.dirname(localUiPath), `ui-${Buffer.from(identity.userId).toString('hex')}.json`)
+        if (method === 'GET') return sendJson(res, 200, target === localSettingsPath ? { model: modelConfigSummary(localModelConfig(identity)) } : readLocalJson(target))
         if (method === 'PUT') {
           const value = await readJson(req)
-          if (target === localSettingsPath) value.model = await validateModelSettings(value.model)
+          if (target === localSettingsPath) {
+            if (identity.kind !== 'local' && !modelPermissions(identity).allowOwn) throw new ApiError(403, ERR.FORBIDDEN, '未获自填 API 授权')
+            if (value.clearKey === true) {
+              localModels.deleteUser(identity.userId)
+              return sendJson(res, 200, { model: { configured: false } })
+            }
+            const config = await validatedSecretConfig(value.model, localModelConfig(identity))
+            localModels.setUser(identity.userId, config)
+            return sendJson(res, 200, { model: modelConfigSummary(config) })
+          }
           writeLocalJson(target, value)
           return sendJson(res, 200, { ok: true })
         }
@@ -594,6 +659,17 @@ export function createServer(options = {}) {
       }
 
       // ---- 管理控制台：用户管理与邀请码管理（仅管理员账号可用） ----
+      if (method === 'POST' && ['/api/me/model-catalog', '/api/local/model-catalog'].includes(pathName)) {
+        const local = pathName.startsWith('/api/local/')
+        if (local && webOnlyEngines) throw new ApiError(403, ERR.FORBIDDEN, '此接口仅供本机使用')
+        if (!local || identity.kind !== 'local') {
+          requireModelAccount(identity)
+          if (!modelPermissions(identity).allowOwn) throw new ApiError(403, ERR.FORBIDDEN, '未获自填 API 授权')
+        }
+        const config = await validatedSecretConfig(await readJson(req), local ? localModelConfig(identity) : modelSecrets.getUser(identity.userId))
+        try { return sendJson(res, 200, { models: await fetchModelCatalog(config) }) }
+        catch { throw new ApiError(502, ERR.BAD_REQUEST, '无法获取模型目录，请手动添加模型 ID') }
+      }
       const requireAdmin = () => {
         if (identity.kind !== 'account' || identity.role !== 'admin') throw new ApiError(403, ERR.FORBIDDEN, '需要管理员权限')
       }
@@ -649,7 +725,7 @@ export function createServer(options = {}) {
         const result = identityStore.register({
           username: body.username, password: body.password, displayName: body.displayName, phone: body.phone,
           role: body.role === 'admin' ? 'admin' : 'user', status: 'active', adminProvisioned: true,
-          modelAccess: body.modelAccess ?? { allowOwn: false, allowShared: false }
+          modelAccess: body.modelAccess ?? { allowOwn: true, allowShared: false }
         })
         return sendJson(res, 201, result)
       }
@@ -1088,9 +1164,11 @@ export function createServer(options = {}) {
         return sendJson(res, 200, { protocol: PROTOCOL_VERSION, registries: pluginRegistry.list() })
       }
       const pluginMatch = /^\/api\/plugins\/([A-Za-z][A-Za-z0-9_-]*)$/.exec(pathName)
+      if (pluginMatch && method === 'POST' && identity.kind !== 'local') requireAdmin()
       if (pluginMatch && method === 'POST') return sendJson(res, 201, { plugin: pluginRegistry.register(pluginMatch[1], await readJson(req)) })
 
       // ---- 远程 R / MATLAB 授权节点（凭据仅从命名环境变量读取） ----
+      if (pathName.startsWith('/api/remote-nodes') && identity.kind !== 'local') requireAdmin()
       if (pathName === '/api/remote-nodes' && method === 'GET') return sendJson(res, 200, { nodes: remoteNodes.list() })
       if (pathName === '/api/remote-nodes' && method === 'POST') return sendJson(res, 201, { node: remoteNodes.register(await readJson(req)) })
       const remoteNodeMatch = /^\/api\/remote-nodes\/([A-Za-z0-9_-]+)\/check$/.exec(pathName)
@@ -1128,12 +1206,14 @@ export function createServer(options = {}) {
           }))
         })
         const bundle = bundleStore.create({ prompt: String(parsed.fields.prompt ?? ''), files, datasets })
+        bundle.tenantId = principal.tenantId
         return sendJson(res, 201, bundleStore.snapshot(bundle))
       }
       const bundleMatch = /^\/api\/bundles\/([A-Za-z0-9_-]+)(?:\/(decisions))?$/.exec(pathName)
       if (bundleMatch) {
         const bundle = bundleStore.get(bundleMatch[1])
         if (!bundle) throw new ApiError(404, ERR.NOT_FOUND, `数据包不存在：${bundleMatch[1]}`)
+        if (principal.tenantId !== 'local' && bundle.tenantId !== principal.tenantId) throw new ApiError(404, ERR.NOT_FOUND, '数据包不存在')
         if (!bundleMatch[2] && method === 'GET') return sendJson(res, 200, bundleStore.snapshot(bundle))
         if (bundleMatch[2] === 'decisions' && method === 'POST') {
           const data = await readJson(req).catch(() => ({}))
@@ -1143,7 +1223,7 @@ export function createServer(options = {}) {
           const result = await bundleStore.decide(bundle, data.decisions, async ({ recommendation, decision, csvBuffer }) => {
             const fileName = safeCsvName(`${bundle.bundleId}_${recommendation.recommendationId}.csv`)
             const ingest = ingestFile(fileName, csvBuffer)
-            const task = store.create({ title: recommendation.objective, engine, prompt: bundle.prompt || recommendation.objective, fileName, bytes: csvBuffer })
+            const task = store.create({ title: recommendation.objective, engine, prompt: bundle.prompt || recommendation.objective, fileName, bytes: csvBuffer, tenantId: principal.tenantId })
             task.dataset = ingest.profile
             task.bundleId = bundle.bundleId
             task.recommendationId = recommendation.recommendationId
@@ -1181,6 +1261,7 @@ export function createServer(options = {}) {
           if (webOnlyEngines && engine === 'matlab') throw new ApiError(400, ERR.INVALID_ENGINE, '网页端不支持 MATLAB，请改用 Python / R')
           const upload = uploadStore.status(principal.tenantId, uploadTaskMatch[1])
           const bytes = fs.readFileSync(uploadStore.consume(principal.tenantId, uploadTaskMatch[1]))
+          uploadStore.remove(principal.tenantId, uploadTaskMatch[1])
           const ingest = ingestFile(upload.fileName, bytes)
           rateLimiter.beginTask(principal.tenantId)
           quotaHeld = true
@@ -1203,6 +1284,7 @@ export function createServer(options = {}) {
         try {
           if (!uploadMatch[1] && method === 'POST') return sendJson(res, 201, uploadStore.create(principal.tenantId, await readJson(req)))
           if (uploadMatch[1] && method === 'GET') return sendJson(res, 200, uploadStore.status(principal.tenantId, uploadMatch[1]))
+          if (uploadMatch[1] && method === 'DELETE') return sendJson(res, 200, uploadStore.remove(principal.tenantId, uploadMatch[1]))
           if (uploadMatch[1] && method === 'PUT') {
             const chunk = await readBody(req, maxBytes, res)
             return sendJson(res, 200, uploadStore.append(principal.tenantId, uploadMatch[1], { offset: Number(req.headers['x-upload-offset']), chunk }))
@@ -1216,9 +1298,7 @@ export function createServer(options = {}) {
       }
 
       // ---- 全局偏好学习控制（独立于任务生命周期持久化） ----
-      if (remoteEnabled && principal.tenantId !== 'local' && pathName.startsWith('/api/preferences')) {
-        throw new ApiError(403, ERR.UNAUTHORIZED, '远程租户不共享全局偏好库')
-      }
+      // Preference history is scoped to the authenticated tenant.
       if (pathName === '/api/preferences' && method === 'GET') {
         return sendJson(res, 200, preferenceStore.snapshot())
       }
@@ -1297,10 +1377,11 @@ export function createServer(options = {}) {
           if (parsed.fields.modelConfig) throw new ApiError(403, ERR.FORBIDDEN, '网页端模型配置必须由账号授权设置，不能随任务上传')
           modelConfig = modelConfigForIdentity(identity)
         } else if (parsed.fields.modelConfig) {
+          if (identity.kind !== 'local' && !modelPermissions(identity).allowOwn) throw new ApiError(403, ERR.FORBIDDEN, '未获自填 API 授权')
           try { modelConfig = await validateModelSettings(JSON.parse(parsed.fields.modelConfig)) }
           catch { throw new ApiError(400, ERR.BAD_REQUEST, '模型配置无效，需 HTTPS 公网 API 地址、模型和接口类型') }
         } else {
-          modelConfig = readLocalJson(localSettingsPath).model
+          modelConfig = modelConfigForIdentity(identity)
         }
         const engine = (parsed.fields.engine ?? 'python').toString().trim()
         if (!ENGINE_KINDS.has(engine)) {
@@ -1861,6 +1942,7 @@ export function createServer(options = {}) {
       // 停止监听前先取消并等待后台编排；否则已关闭测试/桌面服务的 Python
       // 渲染仍会与下一实例争用字体缓存和 CPU，形成偶发的 60 秒连接重置。
       retention.stop()
+      clearInterval(uploadCleanupTimer)
       for (const task of store.tasks.values()) {
         clearTimeout(task.ttlTimer)
         if (!task.abortController.signal.aborted) task.abortController.abort(new Error('server shutting down'))
@@ -1907,7 +1989,9 @@ if (isMain) {
     process.stdout.write('[local-agent] research-plotting local agent started (v0.4.0)\n')
     process.stdout.write(`[local-agent] HTTP  http://${host}:${port}/health\n`)
     process.stdout.write(`[local-agent] WS    ws://${host}:${port}/api/tasks/:id/events （连接后发送 {"type":"auth","token":"<TOKEN>"}）\n`)
-    process.stdout.write(`[local-agent] TOKEN ${t}\n`)
+    // Local hosts consume this boot handshake; production logs must never
+    // contain the all-powerful host token.
+    if (process.env.REMOTE_MODE !== '1' && process.env.LOCAL_AGENT_WEB_ONLY !== '1') process.stdout.write(`[local-agent] TOKEN ${t}\n`)
     if (n) process.stdout.write(`[local-agent] restored ${n} task(s) from .data\n`)
     process.stdout.write(`[local-agent] persist ${agent.storage ? agent.storage.root : 'off (LOCAL_AGENT_PERSIST=0)'}\n`)
     process.stdout.write(`[local-agent] PROTOCOL v${PROTOCOL_VERSION} (bind ${host}; auth: Authorization: Bearer <TOKEN>；WS 握手后消息认证，令牌不进 URL)\n`)

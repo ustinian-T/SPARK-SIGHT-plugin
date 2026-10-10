@@ -1,6 +1,6 @@
 {
   "name": "sparksight-dsh",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "SPARK SIGHT for DeepSeek Harness: research plotting inside the agent harness",
   "type": "module",
   "main": "./index.js",
@@ -23,7 +23,8 @@
   ],
   "scripts": {
     "test": "node --test",
-    "prepare:package": "node scripts/prepare-dsh.mjs"
+    "prepare:package": "node scripts/prepare-dsh.mjs",
+    "prepack": "node scripts/prepare-dsh.mjs"
   },
   "dsh": {
     "bundle": {

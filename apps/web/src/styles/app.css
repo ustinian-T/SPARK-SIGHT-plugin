@@ -1819,3 +1819,82 @@ select.form-control { cursor: pointer; }
   .spec-editor__grid > .tree { border-right: 0 !important; border-bottom: 1px solid var(--line); padding-bottom: 10px; }
   .spec-editor__grid > .tree + div { padding-left: 0 !important; }
 }
+
+/* VS Code sidebar: native theme, vertical workspace and compact sign-in. */
+:root[data-spark-host="vscode"] {
+  --sans: var(--vscode-font-family, sans-serif);
+  --mono: var(--vscode-editor-font-family, monospace);
+  --ink-900: var(--vscode-foreground);
+  --ink-800: var(--vscode-foreground);
+  --ink-700: var(--vscode-foreground);
+  --ink-600: var(--vscode-descriptionForeground);
+  --ink-500: var(--vscode-descriptionForeground);
+  --line: var(--vscode-widget-border, #8885);
+  --line-strong: var(--vscode-widget-border, #8887);
+  --glass-bg: var(--vscode-sideBar-background);
+  --glass-bg-strong: var(--vscode-sideBar-background);
+  --glass-bg-soft: var(--vscode-editor-background);
+  --glass-border: var(--line);
+  --glass-shadow: none;
+  --glass-shadow-lg: none;
+  --blur: none;
+  --radius: 6px;
+  --radius-lg: 8px;
+  --brand-500: var(--vscode-focusBorder);
+  --brand-600: var(--vscode-button-background);
+  --brand-50: var(--vscode-list-hoverBackground);
+  --brand-100: var(--vscode-list-hoverBackground);
+  --brand-700: var(--vscode-textLink-foreground);
+  color: var(--vscode-foreground);
+  background: var(--vscode-sideBar-background);
+  font-size: var(--vscode-font-size, 13px);
+}
+[data-spark-host="vscode"] body { background: var(--vscode-sideBar-background); min-width: 0; }
+[data-spark-host="vscode"] .app-bg { display: none; }
+.app.app--vscode {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  grid-template-areas: 'title' 'main' 'console' 'status';
+  padding: 0;
+  gap: 0;
+  min-width: 0;
+  height: 100dvh;
+}
+.app--vscode .spark-toolbar { grid-area: title; display: flex; align-items: center; gap: 4px; padding: 8px; flex-wrap: wrap; border-bottom: 1px solid var(--line); }
+.spark-toolbar select { min-width: 70px; flex: 1; }
+.spark-toolbar button, .spark-toolbar select {
+  font: inherit; color: var(--vscode-foreground); background: var(--vscode-input-background);
+  border: 1px solid var(--line); border-radius: 4px; padding: 5px 7px; cursor: pointer;
+}
+.spark-toolbar button:hover { background: var(--vscode-list-hoverBackground); }
+.app--vscode .sidebar { display: block; position: absolute; inset: 44px 0 25px; width: 100%; max-width: none; z-index: 20; background: var(--vscode-sideBar-background); transform: none; visibility: visible; }
+.app--vscode.app--sidebar-collapsed .sidebar { display: none; }
+.app--vscode .layout-backdrop { display: none; }
+.app--vscode .workarea, .app--vscode .view-body { min-width: 0; width: 100%; }
+.app--vscode .workbar { display: none; }
+.app--vscode .bar, .app--vscode .panel { border-radius: 0; box-shadow: none; }
+.app--vscode .chat { min-width: 0; }
+.app--vscode .chat__composer, .app--vscode .composer { padding: 8px; }
+.app--vscode .compare-grid { grid-template-columns: minmax(0, 1fr); }
+.app--vscode .codeviewer__split { display: flex; flex-direction: column; }
+.spark-source-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding: 8px; }
+.spark-source-actions span { font-size: 11px; color: var(--ink-500); }
+[data-spark-host="vscode"] .sd-root {
+  background: var(--vscode-sideBar-background); color: var(--vscode-foreground);
+  --sd-text: var(--vscode-foreground); --sd-text-dim: var(--vscode-descriptionForeground);
+  --sd-bg: var(--vscode-sideBar-background); --sd-line: var(--line);
+}
+[data-spark-host="vscode"] .sd-root canvas, [data-spark-host="vscode"] .sd-footer { display: none; }
+[data-spark-host="vscode"] .sd-auth__body { padding: 8px; min-height: 0; display: block; }
+[data-spark-host="vscode"] .sd-auth__card { width: 100%; max-width: none; padding: 14px 8px; background: transparent; border: 0; box-shadow: none; border-radius: 0; }
+[data-spark-host="vscode"] .sd-auth__title { font-size: 20px; }
+[data-spark-host="vscode"] .sd-auth__subtitle { font-size: 12px; }
+[data-spark-host="vscode"] .sd-input { height: 34px; padding: 6px 9px; font-size: 13px; background: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--line); border-radius: 4px; }
+[data-spark-host="vscode"] .sd-field label, [data-spark-host="vscode"] .sd-agree, [data-spark-host="vscode"] .sd-auth__embed { font-size: 12px; }
+[data-spark-host="vscode"] .sd-btn { min-height: 34px; border-radius: 4px; font-size: 13px; padding: 6px 10px; }
+[data-spark-host="vscode"] .sd-btn--primary { background: var(--vscode-button-background); color: var(--vscode-button-foreground); box-shadow: none; }
+[data-spark-host="vscode"] .sd-brand img { width: 28px; height: 28px; }
+[data-spark-host="vscode"] .sd-brand__cn { font-size: 16px; color: var(--vscode-foreground); }
+[data-spark-host="vscode"] .sd-tabs { margin: 12px 0; }
+[data-spark-host="vscode"] .sd-tabs button { padding: 7px; font-size: 12px; }

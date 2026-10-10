@@ -5,6 +5,7 @@ import { requestAnthropicIntent } from './llm/anthropic.js'
 import { anthropicEndpoint } from './llm/anthropic.js'
 import { openAiEndpoint } from './llm/openai.js'
 import { parseIntentPayload } from './llm/parse.js'
+import { providerFetch } from './providerFetch.js'
 
 const SYSTEM_PROMPT = `你是科研绘图辅助智能体的意图解析器。把用户需求解析为严格 JSON：
 {
@@ -49,7 +50,7 @@ function diagnosticCategory(error) {
   return 'REQUEST_FAILED'
 }
 
-export async function probeProvider(input = providerConfig(), fetchImpl = fetch) {
+export async function probeProvider(input = providerConfig(), fetchImpl = providerFetch) {
   const config = { ...input }
   const endpoint = config.provider === 'anthropic'
     ? anthropicEndpoint(config.baseUrl)
@@ -129,7 +130,7 @@ export async function parseIntentWithLlm(prompt, profile, options = {}) {
       const sentinel = setTimeout(() => reject(Object.assign(new Error('timeout'), { name: 'AbortError' })), config.timeoutMs + 10)
       sentinel.unref?.()
     })
-    const payload = await Promise.race([requestIntent(config, messages, options.fetchImpl ?? fetch, ctrl.signal), timeout])
+    const payload = await Promise.race([requestIntent(config, messages, options.fetchImpl ?? providerFetch, ctrl.signal), timeout])
     const parsed = parseIntentPayload(payload, config.provider, config.protocol)
     return { spec: validateIntent(parsed, columns), source: 'llm', raw: parsed }
   } catch (error) {

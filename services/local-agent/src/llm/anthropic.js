@@ -1,6 +1,6 @@
 export function anthropicEndpoint(baseUrl) {
   const base = String(baseUrl).replace(/\/$/, '')
-  return base.endsWith('/v1/messages') ? base : `${base}/v1/messages`
+  return base.endsWith('/messages') ? base : base.endsWith('/v1') ? `${base}/messages` : `${base}/v1/messages`
 }
 
 export async function requestAnthropicIntent(config, messages, fetchImpl, signal) {

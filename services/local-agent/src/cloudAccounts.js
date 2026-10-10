@@ -13,6 +13,7 @@ function publicUser(value) {
   return {
     userId: value.userId, username: String(value.username ?? ''), displayName: String(value.displayName ?? value.username ?? ''),
     role: value.role === 'admin' ? 'admin' : 'user', kind: 'account', status: 'active',
+    modelAccess: { allowOwn: value.role === 'admin' || value.modelAccess?.allowOwn === true, allowShared: false },
     expiresAt: Math.min(Number(value.expiresAt) || Date.now() + 7 * 86400000, Date.now() + 7 * 86400000)
   }
 }

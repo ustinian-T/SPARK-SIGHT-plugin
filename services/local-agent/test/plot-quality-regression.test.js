@@ -69,7 +69,9 @@ for (const engine of ['python', 'r']) test(`Real ${engine}: Chinese grouped bar 
         fs.copyFileSync(path.join(workdir, `${plan.plan_id}.png`), path.join(process.env.DEEP_IMAGING_QA_OUTPUT, `${engine}_${plan.plan_id}.png`))
       }
     } finally {
-      if (!process.env.DEEP_IMAGING_QA_KEEP) fs.rmSync(workdir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 })
+      // Windows may retain R font handles briefly; asynchronous retries let
+      // pending handle-close callbacks finish instead of blocking the event loop.
+      if (!process.env.DEEP_IMAGING_QA_KEEP) await fs.promises.rm(workdir, { recursive: true, force: true, maxRetries: 25, retryDelay: 200 })
     }
   }
 })

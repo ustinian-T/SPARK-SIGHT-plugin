@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { defaultModelSettings, loadModelSettings, saveModelSettings, isWebMode, endpointForProtocol } from '../client/modelSettings'
+import { defaultModelSettings, loadModelSettings, saveModelSettings, isWebMode, clearModelKey } from '../client/modelSettings'
 import { Button, Tooltip } from './common'
 import { Icon } from './icons'
 import { WebModelSettingsPanel } from './WebModelSettingsPanel'
+import { ModelProviderFields } from './ModelProviderFields'
 
 export function ModelSettingsPanel({ close }: { close: () => void }) {
   return isWebMode() ? <WebModelSettingsPanel close={close} /> : <LocalModelSettingsPanel close={close} />
@@ -31,10 +32,10 @@ function LocalModelSettingsPanel({ close }: { close: () => void }) {
       await saveModelSettings(settings)
       // 回读校验：只有确实写回后端后才提示成功，杜绝 no-op 假提示。
       const saved = await loadModelSettings()
-      if (saved.apiKey !== settings.apiKey || saved.baseUrl !== settings.baseUrl || saved.model !== settings.model) {
+      if (saved.baseUrl !== settings.baseUrl || saved.model !== settings.model) {
         throw new Error('保存后回读不一致，设置可能未生效')
       }
-      setStatus('已保存，下次任务生效')
+      setSettings({ ...saved, apiKey: '' }); setStatus('已加密保存，下次任务生效；密钥不回传界面')
     } catch (error) {
       setStatus(error instanceof Error ? error.message : '保存失败')
     } finally {
@@ -46,7 +47,7 @@ function LocalModelSettingsPanel({ close }: { close: () => void }) {
     setSaving(true)
     setStatus('')
     try {
-      await saveModelSettings({ ...settings, apiKey: '' })
+      await clearModelKey()
       const saved = await loadModelSettings()
       setSettings({ ...saved, apiKey: '' })
       setStatus('已清除 API Key')
@@ -63,7 +64,7 @@ function LocalModelSettingsPanel({ close }: { close: () => void }) {
         模型 API 设置
         <Tooltip
           content={webMode
-            ? '网页端模型配置由服务端管理，不持久化 API Key；桌面端可通过系统凭据库保存。'
+            ? '网页端模型配置由服务端管理，不持久化 API Key；桌面端可通过本机加密存储保存。'
             : '设置、数据与聊天记录保存在本机，模型请求由本地 Agent 直接发出。'}
           placement="right"
         >
@@ -72,25 +73,7 @@ function LocalModelSettingsPanel({ close }: { close: () => void }) {
           </span>
         </Tooltip>
       </h2>
-      <label className="form-label">接口类型</label>
-      <select className="form-control" value={settings.protocol} disabled={webMode} onChange={e => {
-        const protocol = e.target.value as typeof settings.protocol
-        setSettings({ ...settings, protocol, provider: protocol === 'anthropic_messages' ? 'anthropic' : 'openai', baseUrl: endpointForProtocol(protocol, settings.baseUrl) })
-      }}>
-        <option value="responses">OpenAI Responses</option><option value="chat_completions">OpenAI Chat Completions</option><option value="anthropic_messages">Anthropic Messages</option>
-      </select>
-      <label className="form-label">API 地址</label><input className="form-control" value={settings.baseUrl} disabled={webMode} onChange={e => setSettings({ ...settings, baseUrl: e.target.value })} />
-      <label className="form-label">模型</label><input className="form-control" value={settings.model} disabled={webMode} onChange={e => setSettings({ ...settings, model: e.target.value })} />
-      <label className="form-label">API Key</label>
-      <input
-        className="form-control"
-        type="password"
-        autoComplete="off"
-        value={settings.apiKey}
-        disabled={webMode}
-        placeholder={webMode ? '网页端不保存密钥，请使用桌面端（系统凭据库）' : ''}
-        onChange={e => setSettings({ ...settings, apiKey: e.target.value })}
-      />
+      <ModelProviderFields settings={settings} change={setSettings} disabled={saving} />
       <p role="status">{status}</p>
       <div style={{ display: 'flex', gap: 8 }}>
         <Button onClick={onSave} disabled={webMode || saving}>{saving ? '保存中…' : '保存'}</Button>

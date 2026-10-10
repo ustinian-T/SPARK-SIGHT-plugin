@@ -76,7 +76,9 @@ export class Orchestrator {
     this._runSandbox = options.runSandbox ?? runInSandbox
     this._caps = null
     this.preferenceStore = options.preferenceStore ?? new PreferenceStore(this.storage)
+    this.preferencesFor = options.getPreferenceStore ?? (() => this.preferenceStore)
     this.getUserProfile = options.getUserProfile ?? (task => task.userProfile ?? {})
+    this.modelFetch = options.modelFetch
   }
 
   async capabilities() {
@@ -96,7 +98,7 @@ export class Orchestrator {
   }
 
   recordPreference(task, preference) {
-    const result = this.preferenceStore.append(preference)
+    const result = this.preferencesFor(task).append(preference)
     if (result.written) this.emit(task, { type: 'preference', preference: result.event })
     return result
   }
@@ -515,7 +517,7 @@ export class Orchestrator {
         engine: task.execution.engine,
         executed: false,
         userRequest: `${task.prompt}\n${feedback}`,
-        preferenceEvents: this.preferenceStore.snapshot().events,
+        preferenceEvents: this.preferencesFor(task).snapshot().events,
         clarification: task.clarification
       })
       // feedback 触发的 plans_ready 生成新 PlotRevision 版本记录（旧版本保留在 planVersions）
@@ -570,7 +572,7 @@ export class Orchestrator {
     let question = task.prompt.trim()
 
     const confirmIntent = async (q) => {
-      const r = await parseIntentWithLlm(q, profile, { config: modelConfig })
+      const r = await parseIntentWithLlm(q, profile, { config: modelConfig, fetchImpl: this.modelFetch })
       const spec = r.source === 'llm' ? r.spec : parseIntent(q, profile)
       if (r.source === 'llm') this.log(task, 'info', '意图解析来源：LLM（统计与结论仍由确定性管线产出）')
       else if (r.llmError) this.log(task, 'warn', `LLM 意图解析不可用（${r.llmError}），回退确定性规则`)
@@ -622,7 +624,7 @@ export class Orchestrator {
         decorate: async (round, payload, clarify) => {
           if (round !== 3) return payload
           const recommended = recommendPresentationPalettes({
-            preferenceEvents: this.preferenceStore.snapshot().events,
+            preferenceEvents: this.preferencesFor(task).snapshot().events,
             chartType: clarify.chartType ?? '',
             seriesCount: task.dataset?.columns?.filter((c) => c.inferredType === 'numeric').length ?? 1
           })
@@ -728,7 +730,7 @@ export class Orchestrator {
         engine: task.execution.engine,
         executed: false,
         userRequest: question,
-        preferenceEvents: this.preferenceStore.snapshot().events,
+        preferenceEvents: this.preferencesFor(task).snapshot().events,
         clarification: task.clarification
       })
       s.outputSummary = `生成 ${plans.length} 套候选，覆盖清晰/惯例/密度三策略，evidenceIds 完全共享`

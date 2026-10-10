@@ -28,7 +28,11 @@ export function currentRoute(): SiteRoute {
 
 export function navigate(to: string, { replace = false } = {}): void {
   const target = to.startsWith('#') ? to : `#${to}`
-  if (replace) window.location.replace(target)
+  if (replace) {
+    const url = new URL(window.location.href)
+    url.hash = target
+    window.location.replace(url.href)
+  }
   else window.location.hash = target
 }
 

@@ -23,7 +23,7 @@ function Splash({ text = '正在进入灵感视界…' }: { text?: string }) {
     <div className="sd-root" style={{ display: 'grid', placeItems: 'center' }}>
       <Particles />
       <div style={{ position: 'relative', zIndex: 1, textAlign: 'center' }}>
-        <img src="/logo-dark.png" alt="" width={56} height={56} style={{ borderRadius: 14 }} />
+        <img src="./logo-dark.png" alt="" width={56} height={56} style={{ borderRadius: 14 }} />
         <p style={{ color: 'var(--sd-text-dim, #9db4a8)', marginTop: 14, fontFamily: 'inherit' }}>{text}</p>
       </div>
     </div>
@@ -123,6 +123,6 @@ root.render(
   </StrictMode>
 )
 
-if ('serviceWorker' in navigator && import.meta.env.PROD) {
+if ('serviceWorker' in navigator && import.meta.env.PROD && !getHostBridge()) {
   window.addEventListener('load', () => { void navigator.serviceWorker.register('/sw.js') })
 }

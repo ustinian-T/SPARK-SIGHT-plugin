@@ -66,7 +66,7 @@ export function AdminPage() {
   const [editPassword, setEditPassword] = useState('')
   const [editAccess, setEditAccess] = useState({ allowOwn: false, allowShared: false })
   const [creating, setCreating] = useState(false)
-  const [newUser, setNewUser] = useState({ username: '', password: '', displayName: '', phone: '', role: 'user', allowOwn: false, allowShared: false })
+  const [newUser, setNewUser] = useState({ username: '', password: '', displayName: '', phone: '', role: 'user', allowOwn: true, allowShared: false })
   const [sharedModel, setSharedModel] = useState<ModelSummary>({ configured: false })
   const [sharedForm, setSharedForm] = useState({ protocol: 'responses', baseUrl: 'https://ark.cn-beijing.volces.com/api/plan/v3', model: 'ark-code-latest', apiKey: '' })
 
@@ -174,7 +174,7 @@ export function AdminPage() {
             <>
               <div className="sd-admin__head" style={{ marginBottom: 14 }}>
                 <p style={{ margin: 0 }}>共 {users.length} 个账号；待审核注册显示「通过 / 不通过」操作。</p>
-                <button className="sd-btn sd-btn--primary sd-btn--sm" onClick={() => { setCreating(true); setNewUser({ username: '', password: '', displayName: '', phone: '', role: 'user', allowOwn: false, allowShared: false }) }}>添加账号</button>
+                <button className="sd-btn sd-btn--primary sd-btn--sm" onClick={() => { setCreating(true); setNewUser({ username: '', password: '', displayName: '', phone: '', role: 'user', allowOwn: true, allowShared: false }) }}>添加账号</button>
               </div>
               <div className="sd-table-wrap">
                 {loading ? (
@@ -370,7 +370,7 @@ export function AdminPage() {
                 </div>
                 {editing.role !== 'admin' && <div className="sd-admin__permission-options">
                   <label><input type="checkbox" checked={editAccess.allowOwn} onChange={(event) => setEditAccess({ ...editAccess, allowOwn: event.target.checked })} /> 允许用户填写并长期保存自己的 API</label>
-                  <label><input type="checkbox" checked={editAccess.allowShared} onChange={(event) => setEditAccess({ ...editAccess, allowShared: event.target.checked })} /> 允许使用管理员统一配置的 API</label>
+                  <label><input type="checkbox" checked={false} disabled /> 统一模型配置（公开测试期间不开放）</label>
                 </div>}
                 <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
                   <button type="button" className="sd-btn sd-btn--ghost sd-btn--sm" onClick={() => setEditing(null)}>取消</button>
@@ -413,7 +413,7 @@ export function AdminPage() {
                 <div className="sd-field"><label htmlFor="new-account-role">账号角色</label><select id="new-account-role" className="sd-input" value={newUser.role} onChange={(event) => setNewUser({ ...newUser, role: event.target.value })}><option value="user">普通用户</option><option value="admin">管理员</option></select></div>
                 {newUser.role === 'user' && <div className="sd-admin__permission-options">
                   <label><input type="checkbox" checked={newUser.allowOwn} onChange={(event) => setNewUser({ ...newUser, allowOwn: event.target.checked })} /> 允许自填 API</label>
-                  <label><input type="checkbox" checked={newUser.allowShared} onChange={(event) => setNewUser({ ...newUser, allowShared: event.target.checked })} /> 允许使用统一 API</label>
+                  <label><input type="checkbox" checked={false} disabled /> 统一 API（暂不开放）</label>
                 </div>}
                 <div className="sd-form__row">
                   <div className="sd-field">

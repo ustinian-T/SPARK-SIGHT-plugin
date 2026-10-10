@@ -229,6 +229,13 @@ export function CodeViewer() {
       )}
 
       {saveError && <div className="notebox notebox--warn" style={{ margin: '8px 12px 0' }}><Icon name="warn" size={14} /><span>{saveError}</span></div>}
+      {window.__SPARK_VSCODE__ && <div className="spark-source-actions">
+        <Button size="sm" onClick={() => {
+          setSaveError('')
+          void window.__SPARK_VSCODE__?.openSource({engine,source:editing ? draft : code}).catch(error => setSaveError(error.message))
+        }} disabled={!code}>在 VS Code 中编辑</Button>
+        <span>保存为工作区脚本后，可用侧栏「运行」执行。</span>
+      </div>}
       <div className="code-scroll">
         {editing ? (
           <textarea className="code-editor" value={draft} onChange={(event) => setDraft(event.target.value)} spellCheck={false} aria-label={`${fileName} 源码编辑器`} />

@@ -33,7 +33,6 @@ import type {
   TaskEvent
 } from '../types'
 import { getHostBridge } from '../host/bridge'
-import { loadModelSettings } from './modelSettings'
 import { loadSession as getStoredSession } from '../site/session'
 
 export interface LocalAgentConfig {
@@ -196,10 +195,6 @@ export class RealAgentClient {
     form.append('engine', this.cfg.engine ?? 'python')
     if (params.clarify) form.append('clarify', 'true')
     if (params.clarifyAnswers) form.append('clarifyAnswers', JSON.stringify(params.clarifyAnswers))
-    if (getHostBridge()) {
-      const model = await loadModelSettings()
-      if (model.apiKey) form.append('modelConfig', JSON.stringify(model))
-    }
     form.append('file', new File([params.bytes as BlobPart], params.fileName, { type: 'text/csv' }), params.fileName)
 
     const res = await fetch(`${this.cfg.baseUrl}${this.createTaskPath}`, {

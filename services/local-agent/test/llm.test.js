@@ -60,7 +60,7 @@ test('LLM 返回合法 JSON：source=llm，变量经真实列名校验', async (
   process.env.LOCAL_AGENT_LLM_BASE_URL = `http://127.0.0.1:${port}`
   process.env.LOCAL_AGENT_LLM_API_KEY = 'test-key'
   try {
-    const r = await parseIntentWithLlm('画图', profile)
+    const r = await parseIntentWithLlm('画图', profile, { fetchImpl: fetch })
     assert.equal(r.source, 'llm')
     assert.deepEqual(r.spec.variables, ['treatment_a', 'treatment_b'])
     assert.equal(r.spec.chartType, 'line')
@@ -79,7 +79,7 @@ test('LLM 编造不存在的变量：保留在 missingFields，上层据此 UNKN
   process.env.LOCAL_AGENT_LLM_BASE_URL = `http://127.0.0.1:${port}`
   process.env.LOCAL_AGENT_LLM_API_KEY = 'test-key'
   try {
-    const r = await parseIntentWithLlm('分析营收', profile)
+    const r = await parseIntentWithLlm('分析营收', profile, { fetchImpl: fetch })
     assert.equal(r.source, 'llm')
     assert.deepEqual(r.spec.variables, [])
     assert.deepEqual(r.spec.missingFields, ['revenue'])
@@ -97,7 +97,7 @@ test('端到端：LLM 给出未知字段时任务 FAILED / UNKNOWN_FIELD（不�
   const port = server.address().port
   process.env.LOCAL_AGENT_LLM_BASE_URL = `http://127.0.0.1:${port}`
   process.env.LOCAL_AGENT_LLM_API_KEY = 'test-key'
-  const h = await startTestServer(1)
+  const h = await startTestServer(1, { modelFetch: fetch })
   try {
     const { json } = await createTask(h, { csv: SAMPLE, prompt: '请分析营收变化并出图' })
     const task = await waitForSnapshot(h, json.taskId, (t) => t.state === 'FAILED')
@@ -118,7 +118,7 @@ test('端到端：LLM 正常解析时任务推进到 PRESENT，日志标明来�
   const port = server.address().port
   process.env.LOCAL_AGENT_LLM_BASE_URL = `http://127.0.0.1:${port}`
   process.env.LOCAL_AGENT_LLM_API_KEY = 'test-key'
-  const h = await startTestServer(1)
+  const h = await startTestServer(1, { modelFetch: fetch })
   try {
     const { json } = await createTask(h, { csv: SAMPLE, prompt: '比较三个处理组随观测周的变化趋势，生成论文用图' })
     const task = await waitForSnapshot(h, json.taskId, (t) => t.state === 'PRESENT')

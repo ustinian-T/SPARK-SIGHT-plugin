@@ -50,3 +50,10 @@ Thumbs.db
 release-report.json
 tsc_out.txt
 build_out.txt
+
+# Generated VS Code release configuration and license assembly
+apps/vscode/release-config.json
+apps/vscode/LICENSE-SHARED
+apps/vscode/LICENSE.txt
+apps/vscode/NOTICE.md
+apps/vscode/THIRD_PARTY_NOTICES.md

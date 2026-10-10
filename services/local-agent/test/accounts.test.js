@@ -21,7 +21,7 @@ async function json(base, pathName, { method = 'GET', token, body } = {}) {
   return { response, value: await response.json().catch(() => ({})) }
 }
 
-// 测试引导：直接用 identityStore 签发管理员会话（引导管理员密码仅打印在 stdout）
+// 测试引导：直接用 identityStore 签发管理员会话（引导管理员密码不进入日志）
 function adminToken(agent) {
   const admin = agent.identityStore.state.users.find((user) => user.role === 'admin')
   assert.ok(admin, 'bootstrap admin should exist')
@@ -57,7 +57,7 @@ test('注册校验：账户名 6 位下限、禁中文、唯一性与查重端�
     const accepted = await json(h.base, '/api/auth/register', { method: 'POST', body: { username: 'forgedadmin', password: 'long-password-123', role: 'admin', bootstrap: true, protected: true, adminProvisioned: true, modelAccess: { allowOwn: true, allowShared: true }, agreementAccepted: true, agreementVersion: 'test-v1' } })
     assert.equal(accepted.response.status, 201)
     assert.equal(accepted.value.user.role, 'user')
-    assert.deepEqual(accepted.value.user.modelAccess, { allowOwn: false, allowShared: false })
+    assert.deepEqual(accepted.value.user.modelAccess, { allowOwn: true, allowShared: false })
     assert.equal(h.agent.identityStore.findUser(accepted.value.user.userId).protected, false)
   } finally { await h.close() }
 })
@@ -265,7 +265,7 @@ test('管理员统一 API 与用户自填 API 按授权隔离，密钥持久保�
       const denied = await json(h.base, '/api/me/model-config', { method: 'PUT', token: userToken, body: {
         protocol: 'responses', baseUrl: 'https://api.example.com/v1', model: 'model-own', apiKey: ownKey
       } })
-      assert.equal(denied.response.status, 403)
+      assert.equal(denied.response.status, 200)
       const shared = await json(h.base, '/api/admin/model-config', { method: 'PUT', token: administrator, body: {
         protocol: 'responses', baseUrl: 'https://api.example.com/v1', model: 'model-shared', apiKey: sharedKey
       } })
@@ -278,14 +278,13 @@ test('管理员统一 API 与用户自填 API 按授权隔离，密钥持久保�
       const grant = await json(h.base, `/api/admin/users/${accountId}`, { method: 'PUT', token: administrator, body: {
         modelAccess: { allowOwn: true, allowShared: true }
       } })
-      assert.equal(grant.response.status, 200)
+      assert.equal(grant.response.status, 403)
       const own = await json(h.base, '/api/me/model-config', { method: 'PUT', token: userToken, body: {
         protocol: 'responses', baseUrl: 'https://api.example.com/v1', model: 'model-own', apiKey: ownKey
       } })
       assert.equal(own.response.status, 200)
       const select = await json(h.base, '/api/me/model-source', { method: 'PUT', token: userToken, body: { source: 'shared' } })
-      assert.equal(select.response.status, 200)
-      assert.equal(select.value.source, 'shared')
+      assert.equal(select.response.status, 403)
       assert.equal(JSON.stringify(select.value).includes(sharedKey), false)
       const onDisk = fs.readFileSync(path.join(dataDir, 'model-secrets.json'), 'utf8')
       assert.equal(onDisk.includes(ownKey), false)
@@ -303,16 +302,16 @@ test('管理员统一 API 与用户自填 API 按授权隔离，密钥持久保�
       const token = reopened.agent.identityStore.issue(user).token
       const settings = await json(reopened.base, '/api/me/model-config', { token })
       assert.equal(settings.response.status, 200)
-      assert.equal(settings.value.source, 'shared')
+      assert.equal(settings.value.source, 'own')
       assert.equal(settings.value.own.configured, true)
-      assert.equal(settings.value.shared.configured, true)
+      assert.equal(settings.value.shared.configured, false)
       assert.equal(JSON.stringify(settings.value).includes('secret-persist'), false)
       const revoked = await json(reopened.base, `/api/admin/users/${accountId}`, { method: 'PUT', token: adminToken(reopened.agent), body: {
         modelAccess: { allowOwn: true, allowShared: false }
       } })
       assert.equal(revoked.response.status, 200)
       const afterRevocation = await json(reopened.base, '/api/me/model-config', { token })
-      assert.equal(afterRevocation.value.source, 'none')
+      assert.equal(afterRevocation.value.source, 'own')
       assert.equal(afterRevocation.value.shared.configured, false)
       const adminSession = adminToken(reopened.agent)
       const administratorSelect = await json(reopened.base, '/api/me/model-source', { method: 'PUT', token: adminSession, body: { source: 'shared' } })
@@ -337,6 +336,8 @@ test('静态托管：SPA 回退与路径穿越防护', async () => {
     try {
       const index = await fetch(`${h.base}/`)
       assert.equal(index.status, 200)
+      assert.match(index.headers.get('content-security-policy'), /default-src 'self'; script-src 'self' 'sha256-/)
+      assert.match(index.headers.get('content-security-policy'), /object-src 'none'/)
       assert.match(await index.text(), /site/)
       const spa = await fetch(`${h.base}/some/spa/route`)
       assert.equal(spa.status, 200)
