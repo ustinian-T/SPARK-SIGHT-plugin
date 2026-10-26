@@ -382,6 +382,13 @@ export class RealAgentClient {
     return this.requestJson('/api/preferences', 'DELETE') as Promise<PreferenceSnapshot>
   }
 
+  async recordStylePreference(style: Record<string, string>, summary: string): Promise<PreferenceSnapshot> {
+    const { json } = await this.postJson(`${this.taskBase}/preferences`, {
+      kind: 'manual_edit', scope: 'global', source: 'preferences_panel', style, attributes: style, summary
+    })
+    return (json as { preference?: unknown }).preference ? await this.getPreferences() : json as PreferenceSnapshot
+  }
+
   // v0.4.0 优化：配色学习画像查询（撤销/重置闭环）。
   // GET /api/preferences/colors → 由未撤销配色事件重建的画像（学习摘要/逐色板统计/事件 id）。
   getColorProfile(): Promise<ColorProfile> {
@@ -427,6 +434,20 @@ export class RealAgentClient {
       kind: 'manual_edit',
       ...(selectedPlanId ? { planId: selectedPlanId } : {})
     })
+  }
+
+  async confirmChartRecommendation(chartType: string, selectedPlanId?: string): Promise<void> {
+    await this.postJson(`${this.taskBase}/feedback`, {
+      feedback: `确认图型建议：${chartType}`,
+      chartType,
+      kind: 'manual_edit',
+      ...(selectedPlanId ? { planId: selectedPlanId } : {})
+    })
+  }
+
+  async generatePaperDraft(input: { planId: string; purpose: string; section: string }): Promise<unknown> {
+    const { json } = await this.postJson(`${this.taskBase}/paper-draft`, input)
+    return json
   }
 
   async getPreview(planId?: string, engine?: EngineKind): Promise<PreviewArtifact> {

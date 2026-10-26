@@ -9,7 +9,7 @@ const stale = { token: 'stale-token', baseUrl: 'http://127.0.0.1:5100', user, lo
 beforeEach(() => {
   mocks.getHostBridge.mockReset()
   mocks.getHostBridge.mockReturnValue(null)
-  vi.stubGlobal('window', { location: { origin: 'https://example.com' }, dispatchEvent: vi.fn() })
+  vi.stubGlobal('window', { location: { origin: 'https://www.example.com' }, dispatchEvent: vi.fn() })
   vi.stubGlobal('localStorage', { getItem: vi.fn(() => JSON.stringify(stale)), setItem: vi.fn(), removeItem: vi.fn() })
 })
 afterEach(() => vi.unstubAllGlobals())

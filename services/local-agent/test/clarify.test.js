@@ -8,10 +8,16 @@ import {
   runClarification, parseGoal, parseChartType, parsePresentation, resolvePaletteId, recommendPresentationPalettes,
   mergePrefill, defaultClarification, CLARIFY_ROUNDS, goalQuestion, chartTypeQuestion, presentationQuestion
 } from '../src/clarify.js'
-import { buildPlans } from '../src/plans.js'
+import { buildPlans, normalizeRequestedChartType } from '../src/plans.js'
 import { buildCandidatePool } from '../src/decision/candidates.js'
 import { ingestFile } from '../src/csv.js'
 import { runDeterministicAnalysis } from '../src/stats.js'
+
+test('结构化图型确认：中文建议名称归一化为候选图型', () => {
+  assert.equal(normalizeRequestedChartType('二维散点图'), 'scatter')
+  assert.equal(normalizeRequestedChartType('采用首选建议：小提琴图'), 'violin')
+  assert.equal(normalizeRequestedChartType('surface3d'), 'surface3d')
+})
 
 // 用真实统计管线构造三系列 × 6 观测点（趋势）分析，与 nitrogen 夹具同构
 const here = import.meta.dirname ?? path.dirname(new URL(import.meta.url).pathname)
@@ -169,6 +175,17 @@ test('runClarification：三轮逐轮提问，无要求按科研默认', async (
   assert.match(clarify.caption, /^图1-1 /)
 })
 
+test('runClarification：字段已明确时跳过重复任务与图型追问，仅保留一次排版确认', async () => {
+  const rounds = []
+  const task = {}
+  const result = await runClarification(task, {
+    context: { intentSpec: { pendingFields: [] }, userProfile: {} },
+    ask: async (round) => { rounds.push(round); return '全部按科研默认' }
+  })
+  assert.deepEqual(rounds, [3])
+  assert.equal(result.complete, true)
+})
+
 test('runClarification：图型偏好 双Y轴 进入澄清结果', async () => {
   const task = {}
   const clarify = await runClarification(task, {
@@ -229,6 +246,19 @@ test('buildPlans：clarification.chartType=heatmap 强制进入三套方案之�
   assert.deepEqual(plans.map((p) => p.evidenceIds), plans.map((p) => p.evidenceIds))
 })
 
+test('buildPlans：显式图型约束贯穿三套方案且仍保留至少两个呈现差异', () => {
+  for (const chartType of ['line', 'heatmap']) {
+    const plans = buildPlans(analysis(), {
+      fileName: 'demo.csv',
+      titleBase: '显式图型一致性',
+      clarification: { chartType }
+    })
+    assert.equal(plans.length, 3)
+    assert.equal(new Set(plans.map((plan) => plan.dataSuitability.chartType)).size, 1)
+    assert.ok(plans.every((plan) => plan.diffDimensions.length >= 2))
+  }
+})
+
 test('buildPlans：clarification.chartType 数据不满足时回退并记录 infeasible', () => {
   const plans = buildPlans(analysis(), {
     fileName: 'demo.csv',
@@ -266,4 +296,12 @@ test('候选池：三维候选仅在空间坐标充分时进入，普通宽表�
     assert.ok(c.scoreBreakdown && typeof c.scoreBreakdown === 'object')
     assert.ok(Object.keys(c.scoreBreakdown).length >= 7, '七维可解释评分')
   }
+})
+
+test('三维图澄清支持二次处理选择并保留原始默认', () => {
+  const q = presentationQuestion({ chartType: 'surface3d' })
+  assert.match(q.question, /二次处理/)
+  assert.equal(parsePresentation('二次处理=插值平滑').secondaryProcessing, 'interpolate')
+  assert.equal(parsePresentation('二次处理=聚类分层').secondaryProcessing, 'cluster')
+  assert.equal(defaultClarification().secondaryProcessing, 'raw')
 })

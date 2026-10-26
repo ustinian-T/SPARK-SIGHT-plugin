@@ -369,6 +369,7 @@ export interface PlotPlan {
   plan_id: string
   candidateId?: string
   strategy: PlanStrategy
+  comparisonRole?: 'user_request' | 'system_recommended_clarity' | 'system_recommended_convention' | 'system_recommended_density' | string
   name: string
   rationale: string // 设计理由
   chartType: string
@@ -429,6 +430,11 @@ export interface PlotPlan {
     captionSuggestion: string
     summaryText?: string
     insightTable?: { metric: string; result: string; criterion: string; evidenceId: string }[]
+    qualityNotes?: string[]
+    humanReview?: string[]
+    chartRecommendation?: string
+    recommendation?: { status: string; reason: string; alternatives: string[] }
+    paperDraft?: { status: string; note?: string; text?: string }
   }
 }
 

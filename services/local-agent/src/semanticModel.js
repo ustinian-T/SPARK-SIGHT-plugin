@@ -8,17 +8,25 @@ const ROLES = ['id', 'xTime', 'group', 'facet', 'measure', 'error', 'weight', 'r
 
 // 列名 → 角色的命名模式（中文/英文常见命名，大小写不敏感）
 const PATTERN = {
-  id: /(^|_|-)(id|编号|序号|no)$/i,
+  id: /(^|_|-)(id|编号|序号|no|sample[_ -]?(id|no|number)|样本编号|样本序号)$/i,
   subject: /subject|被试|受试|participant|^s\d*$/i,
-  group: /(^|_|-)(group|分组|组别|condition|treatment|arm|group)$/i,
+  group: /(^|_|-)(group|分组|组别|condition|treatment|arm)$/i,
   facet: /facet|panel|分面|子图/i,
   weight: /weight|权重/i,
-  replicate: /replicate|重复|_rep$|^rep\d*$|^(sample|sample[_ -]?(id|no|number)|样本编号|样本序号|重复编号)$/i,
+  replicate: /replicate|重复|_rep$|^rep\d*$|^sample$|^重复编号$/i,
   label: /label|^name$|标签|名称/i,
-  xTime: /(time|date|week|day|year|month|timestamp|时间|日期)/i
+  xTime: /(time|date|week|day|year|month|timestamp|时间|日期|周次|月次|季度)/i
 }
 
+// 中文实验表格经常使用复合列名，如“实验组别”“处理条件”“对照组别”。
+// 这些列不能依赖英文式的分隔符匹配，否则会被误当作普通分类变量。
+const COMPOUND_GROUP = /(?:实验|处理|对照|干预|治疗|剂量|条件).*(?:组别|分组|处理组|条件|批次)|(?:组别|分组|处理组)$|^(?:组别|分组)$/i
+
 const typeOf = (col) => col.userType ?? col.inferredType
+const inferUnit = (name) => {
+  const m = String(name).match(/[（(]\s*([^()（）]+?)\s*[)）]|[/／]\s*([\u4e00-\u9fa5A-Za-z%℃°μµ]+)\s*$/)
+  return (m?.[1] ?? m?.[2] ?? '').trim() || null
+}
 
 // 统计设计推断所用规则数（固定 5 条，置信度 = 命中数 / 5）
 const DESIGN_RULE_COUNT = 5
@@ -45,8 +53,10 @@ export function buildSemanticModel(profile, text, rawDelimiter) {
     if (isSdColumn(name)) { fieldRoles.error.push(name); continue }
     if (PATTERN.subject.test(name)) { fieldRoles.subject.push(name); continue }
     if (PATTERN.id.test(name)) { fieldRoles.id.push(name); continue }
-    if (PATTERN.group.test(name)) { fieldRoles.group.push(name); continue }
-    if (PATTERN.facet.test(name)) { fieldRoles.facet.push(name); continue }
+    // “treatment_a” 等数值测量列不能仅因列名含 treatment 就被当作分组；
+    // 分组/分面默认必须是分类列，中文实验组别等字段仍按真实类型识别。
+    if ((PATTERN.group.test(name) || COMPOUND_GROUP.test(name)) && t === 'categorical') { fieldRoles.group.push(name); continue }
+    if (PATTERN.facet.test(name) && t === 'categorical') { fieldRoles.facet.push(name); continue }
     if (PATTERN.weight.test(name)) { fieldRoles.weight.push(name); continue }
     if (PATTERN.replicate.test(name)) { fieldRoles.replicate.push(name); continue }
     if (PATTERN.label.test(name)) { fieldRoles.label.push(name); continue }
@@ -112,12 +122,21 @@ export function buildSemanticModel(profile, text, rawDelimiter) {
     warnings.push('研究设计置信度不足（<0.6），已暂推断为 unknown；请用户确认独立/配对/重复测量/聚类设计后再执行推断统计')
   }
 
+  const roleConfidence = Object.fromEntries(ROLES.map((role) => [role, fieldRoles[role].map(name => ({ field: name, confidence: role === 'measure' ? 0.75 : 0.9 }))]))
+  const fieldDictionary = columns.map((col) => ({
+    field: col.name,
+    type: typeOf(col),
+    roles: ROLES.filter(role => fieldRoles[role].includes(col.name)),
+    unit: null,
+    missingRate: col.missingRate ?? 0
+  }))
+
   // ---------- 4. 单位元数据（自动解析不可靠，original 留空待用户确认） ----------
   const units = {}
   for (const col of columns) {
     const isNumeric = typeOf(col) === 'numeric'
     units[col.name] = {
-      original: null,
+      original: inferUnit(col.name),
       confirmed: null,
       allowNormalize: isNumeric,
       allowLog: isNumeric && Number.isFinite(col.min) && col.min > 0
@@ -139,6 +158,8 @@ export function buildSemanticModel(profile, text, rawDelimiter) {
     fieldRoles,
     researchDesign,
     designConfidence: Math.round(designConfidence * 100) / 100,
+    roleConfidence,
+    fieldDictionary,
     units,
     missingness: { mechanism: 'unknown', perColumn },
     warnings

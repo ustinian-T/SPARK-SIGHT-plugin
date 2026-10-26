@@ -98,13 +98,13 @@ function makeSpec(strategy, title, subtitle, xLabel, yLabel, series) {
       },
       {
         panel_id: 'panel_norm',
-        title: '相对首点变化 (%)',
+        title: '趋势 + 分布散点',
         row: 0,
         col: 1,
-        layers: layers('line', series, 'dens_norm', false),
-        scales: scales(xLabel, '相对首点变化 (%)', true),
+        layers: layers('scatter', series, 'dens_scatter', false),
+        scales: scales(xLabel, yLabel, true),
         legend: legend('legend_norm', 'bottom'),
-        annotations: [{ annotation_id: 'ann_baseline', kind: 'hline', y: 100, color: '#888888', text: '基准 100%' }]
+        annotations: []
       }
     ]
   }
@@ -119,14 +119,23 @@ function panelFor(kind, id, row, col, xLabel, yLabel, series, { normalized = fal
     layers: layers(kind, series, id, errors),
     scales: scales(xLabel, normalized ? '相对首点变化 (%)' : yLabel, true),
     legend: legend(`${id}_legend`, 'bottom'),
-    annotations: normalized ? [{ annotation_id: `${id}_baseline`, kind: 'hline', y: 100, color: '#888888', text: '基准 100%' }] : []
+    annotations: normalized ? [{ annotation_id: `${id}_baseline`, kind: 'hline', y: 100, color: '#888888', text: '基准 100%' }] : [],
+    ...(errors ? { errorBarMode: 'se', errorBarDefinition: '标准误 SE；每个时间点/分组同时记录有效样本量 n' } : {})
   }
 }
 
 function makeCandidateSpec(candidate, strategy, title, xLabel, yLabel, series, extra = {}) {
-  if (candidate.candidateId === 'c_clarity_bar') return makeSpec('clarity', title, undefined, xLabel, yLabel, series)
-  if (candidate.candidateId === 'c_convention_line_err') return makeSpec('convention', title, undefined, xLabel, yLabel, series)
-  if (candidate.candidateId === 'c_density_dual') return makeSpec('density', title, undefined, xLabel, yLabel, series)
+  // 候选方案在显式图型约束下会复制并改写 candidateId；因此不能只依赖
+  // canonical id，否则复制出的折线方案会落入默认四联图并误触发热力图门禁。
+  if (candidate.candidateId === 'c_clarity_bar' || candidate.chartType === 'grouped_bar' || candidate.chartType === 'grouped_bar_error') {
+    return makeSpec('clarity', title, undefined, xLabel, yLabel, series)
+  }
+  if (candidate.candidateId === 'c_convention_line_err' || candidate.chartType === 'line_error') {
+    return makeSpec('convention', title, undefined, xLabel, yLabel, series)
+  }
+  if (candidate.candidateId === 'c_density_dual' || candidate.chartType === 'dual_line_normalized') {
+    return makeSpec('density', title, undefined, xLabel, yLabel, series)
+  }
   const layout = candidate.features.layout
   const common = {
     figure_id: `fig_${candidate.candidateId}`,
@@ -189,8 +198,8 @@ function makeCandidateSpec(candidate, strategy, title, xLabel, yLabel, series, e
   if (candidate.chartType === 'dual_axis') {
     return { figure: common, panels: [panelFor('dual_axis', 'panel_0', 0, 0, xLabel, yLabel, series)] }
   }
-  if (candidate.chartType === 'surface3d') {
-    return { figure: common, panels: [panelFor('surface3d', 'panel_0', 0, 0, xLabel, yLabel, series)] }
+  if (candidate.chartType === 'surface3d' || candidate.chartType === 'cone3d' || candidate.chartType === 'line3d' || candidate.chartType === 'filled_line3d') {
+    return { figure: common, panels: [panelFor(candidate.chartType, 'panel_0', 0, 0, xLabel, yLabel, series)] }
   }
   if (candidate.chartType === 'scatter3d') {
     return { figure: common, panels: [panelFor('scatter3d', 'panel_0', 0, 0, xLabel, yLabel, series)] }
@@ -223,7 +232,8 @@ const CHART_LABEL = {
   forest: '森林图（均值 ± 95% CI）',
   dual_axis: '双 Y 轴图',
   surface3d: '三维曲面图',
-  scatter3d: '三维散点图'
+  scatter3d: '三维散点图',
+  cone3d: '三维锥状图'
 }
 
 // 用户澄清中的图型偏好 → 候选 chartType（buildPlans 据此强制候选进入对应策略）
@@ -232,6 +242,9 @@ const CLARIFY_CHARTTYPE_TO_CANDIDATE = Object.freeze({
   dual_axis: 'dual_axis',
   surface3d: 'surface3d',
   scatter3d: 'scatter3d',
+  cone3d: 'cone3d',
+  line3d: 'line3d',
+  filled_line3d: 'filled_line3d',
   line: 'line_error',
   bar: 'grouped_bar',
   grouped_bar: 'grouped_bar',
@@ -243,7 +256,35 @@ const CLARIFY_CHARTTYPE_TO_CANDIDATE = Object.freeze({
   stacked_area: 'stacked_area',
   paired_dot: 'paired_dot',
   forest: 'forest'
+  ,line3d: '三维折线图'
+  ,filled_line3d: '三维折线填充图'
 })
+
+// 反馈确认也可能携带用户界面展示的中文图型名称；统一归一化后再进入候选池，
+// 避免把“采用二维散点图”当作普通自然语言而丢失图型约束。
+export function normalizeRequestedChartType(value) {
+  const text = String(value ?? '').trim()
+  if (!text) return null
+  const direct = Object.keys(CLARIFY_CHARTTYPE_TO_CANDIDATE).find((key) => key === text)
+  if (direct) return direct
+  if (/三维曲面/.test(text)) return 'surface3d'
+  if (/三维散点/.test(text)) return 'scatter3d'
+  if (/三维锥|锥状/.test(text)) return 'cone3d'
+  if (/三维填充折线|3d.*填充折线/i.test(text)) return 'filled_line3d'
+  if (/三维折线|3d.*折线/i.test(text)) return 'line3d'
+  if (/热力/.test(text)) return 'heatmap'
+  if (/双.?Y轴/.test(text)) return 'dual_axis'
+  if (/小提琴/.test(text)) return 'violin'
+  if (/箱线/.test(text)) return 'box'
+  if (/森林/.test(text)) return 'forest'
+  if (/堆叠/.test(text)) return 'stacked_area'
+  if (/配对.*点|配对连线/.test(text)) return 'paired_dot'
+  if (/散点/.test(text)) return 'scatter'
+  if (/点图|点状/.test(text)) return 'dot_plot'
+  if (/柱|条形/.test(text)) return 'grouped_bar'
+  if (/折线/.test(text)) return 'line'
+  return null
+}
 
 function requestedRules(text = '') {
   const dpi = Math.min(600, Math.max(150, Number(/DPI\s*=\s*(\d+)/i.exec(text)?.[1] ?? 300)))
@@ -279,8 +320,9 @@ function applyGroupAnnotations(spec, summary, evidence) {
   for (const panel of spec.panels ?? []) {
     const kind = panel.layers?.[0]?.kind
     if (kind === 'bar' || kind === 'line' || kind === 'box_jitter' || kind === 'violin' || kind === 'dotplot') {
-      panel.groups = { groupCol: summary.groups.groupCol, measure: summary.groups.measure }
+      panel.groups = { groupCol: summary.groups.groupCol, measure: summary.groups.measure, xCol: summary.groups.xCol ?? null }
       panel.errorBarMode = 'se'
+      panel.errorBarDefinition = '标准误 SE；每个时间点/分组记录有效样本量 n'
       panel.confidenceBand = kind === 'line'
       if (pairs.length) panel.significance = pairs
     }
@@ -295,11 +337,21 @@ function applyGroupAnnotations(spec, summary, evidence) {
  */
 export function buildPlans(analysis, opts) {
   const { summary, evidence, claims } = analysis
-  const { fileName, titleBase, engine = 'python', executed = false, userRequest = '', preferenceEvents = [], clarification = null, userProfile = null } = opts
-  const xLabel = summary.xLabel
+  const { fileName, titleBase, engine = 'python', executed = false, userRequest = '', preferenceEvents = [], clarification = null, userProfile = null, taskSpec = null } = opts
+  const requestedChartType = normalizeRequestedChartType(opts.requestedChartType)
+  const effectiveClarification = requestedChartType ? { ...(clarification ?? {}), chartType: requestedChartType } : clarification
+  const requestedXField = taskSpec?.fieldSlots?.xField ?? null
+  const requestedYField = taskSpec?.fieldSlots?.yField ?? null
+  const requestedZField = taskSpec?.fieldSlots?.zField ?? null
+  const xLabel = requestedXField || summary.xLabel
   const requestedXLabel = /(?:横轴|[xX]轴)(?:名称|标题)?\s*(?:为|是|=|：|:)\s*([^，,。;；\n]+)/.exec(userRequest)?.[1]?.trim()
-  const yLabel = /(?:纵轴|[yY]轴)(?:名称|标题)?\s*(?:为|是|=|：|:)\s*([^，,。;；\n]+)/.exec(userRequest)?.[1]?.trim() || '测量值'
-  const measures = summary.series.map((s) => s.label)
+  const yLabel = requestedYField || /(?:纵轴|[yY]轴)(?:名称|标题)?\s*(?:为|是|=|：|:)\s*([^，,。;；\n]+)/.exec(userRequest)?.[1]?.trim() || '测量值'
+  const explicit3dFields = ['surface3d', 'scatter3d', 'cone3d', 'line3d', 'filled_line3d'].includes(effectiveClarification?.chartType)
+  const measures = explicit3dFields && requestedXField && requestedYField && requestedZField
+    ? [requestedXField, requestedYField, requestedZField]
+    : requestedYField && summary.series.some((s) => s.label === requestedYField)
+    ? [requestedYField]
+    : summary.series.map((s) => s.label)
   const evidenceIds = evidence.map((e) => e.evidence_id)
   const sharedSummary =
     `${summary.series.length} 个测量系列 × ${summary.x.length} 个观测点；统计仅执行一次，三方案共享证据账本。` +
@@ -324,28 +376,66 @@ export function buildPlans(analysis, opts) {
       deps: ['pandas', 'matplotlib']
     },
     density: {
-      name: '方案三 · 双面板趋势与相对变化',
-      rationale: '信息密度优先：单图并排呈现原始趋势与相对首点变化率，兼顾绝对水平与增长幅度，适合在有限版面承载更多可比信息。',
-      chartType: '1×2 复合子图（折线 + 归一化）',
+      name: '方案三 · 趋势与分布散点',
+      rationale: '信息密度优先：并排呈现原始趋势与观测分布散点，既保留时间变化，也直接暴露离散程度和异常点，适合技术报告比较。',
+      chartType: '1×2 复合子图（趋势 + 分布散点）',
       scene: '技术报告/附录，需要同时呈现绝对量与相对变化',
       deps: ['pandas', 'matplotlib']
     }
   }
 
   // 8.1/8.3：K=6~12 候选池 → 六维效用评分 → MMR（仅可执行候选可入选，8.4）
-  const pool = buildCandidatePool(analysis)
+  // 自动推荐仍要求明确的空间坐标；用户明确点名三维图并提供至少三个真实数值字段时，
+  // 允许使用“温度×湿度×响应指标”等科研坐标语义，不把普通组别误判为空间坐标。
+  const explicit3d = ['surface3d', 'scatter3d', 'cone3d', 'line3d', 'filled_line3d'].includes(effectiveClarification?.chartType)
+  // 结构化三方案提示词明确要求“用户方案 + 系统推荐”时，才允许后两套切换图型；
+  // 普通澄清流程继续保持显式图型约束，避免旧任务静默变更。
+  const structuredComparison = /(?:plan1\s*=\s*user_request|system_recommended|用户要求.*系统推荐|按用户要求.*系统推荐)/i.test(userRequest)
+  const explicit3dReady = explicit3d && Number(analysis.chartContext?.numericMeasureCount ?? 0) >= 3
+  const candidateAnalysis = explicit3dReady
+    ? { ...analysis, chartContext: { ...analysis.chartContext, spatialReady: true, spatialDiagnostics: { ...(analysis.chartContext?.spatialDiagnostics ?? {}), source: 'explicit_user_request', requiredNumericFields: 3 } } }
+    : analysis
+  const pool = buildCandidatePool(candidateAnalysis)
   // An explicit plot family is a constraint, not a preference competing with MMR.
   // Three alternatives vary presentation while preserving the requested marks.
   const explicitBar = /(?:分组|簇状|柱状|柱形|条形)图|grouped\s*bar|bar\s*(?:chart|plot)/i.test(userRequest)
-    || ['bar', 'grouped_bar'].includes(clarification?.chartType)
+    || ['bar', 'grouped_bar'].includes(effectiveClarification?.chartType)
   const lambda = opts.lambda ?? DEFAULT_LAMBDA
   const order = ['clarity', 'convention', 'density']
   // 用户澄清明确指定图型时：强制该候选进入对应策略（数据不满足则跳过并在审计中说明）
-  const clarifyTarget = clarification?.chartType && clarification.chartType !== 'auto'
-    ? CLARIFY_CHARTTYPE_TO_CANDIDATE[clarification.chartType] : null
+  const clarifyTarget = effectiveClarification?.chartType && effectiveClarification.chartType !== 'auto'
+    ? CLARIFY_CHARTTYPE_TO_CANDIDATE[effectiveClarification.chartType] : null
   const clarifyCandidate = clarifyTarget ? pool.find((c) => c.candidateId === clarifyTarget || c.chartType === clarifyTarget) : null
   const clarifyForced = clarifyCandidate && clarifyCandidate.executable !== false
   const preferenceCandidateId = clarifyForced ? clarifyCandidate.candidateId : null
+  const strategyFeatures = (candidate, strategy) => {
+    const base = candidate.features ?? {}
+    const marks = base.encoding?.marks?.length ? base.encoding.marks : [candidate.chartType]
+    const overrides = {
+      clarity: {
+        layout: { rows: 1, cols: 1, panels: 1 },
+        encoding: { ...base.encoding, marks, normalized: false },
+        statPresentation: { ...base.statPresentation, raw: false, normalized: false, significance: false },
+        color: { mode: 'categorical', monochromePrint: false },
+        annotation: { kinds: [], count: 0 }
+      },
+      convention: {
+        layout: { rows: 1, cols: 1, panels: 1 },
+        encoding: { ...base.encoding, marks, errorBars: true, normalized: false },
+        statPresentation: { ...base.statPresentation, errorBars: true, normalized: false },
+        color: { mode: 'categorical', monochromePrint: true },
+        annotation: { kinds: ['grid'], count: 1 }
+      },
+      density: {
+        layout: { rows: 1, cols: 2, panels: 2 },
+        encoding: { ...base.encoding, marks, normalized: true },
+        statPresentation: { ...base.statPresentation, raw: true, normalized: true },
+        color: { mode: 'sequential', monochromePrint: false },
+        annotation: { kinds: ['sample_size'], count: 1 }
+      }
+    }
+    return { ...base, chartType: candidate.chartType, strategy, ...overrides[strategy] }
+  }
   // 每个策略先由全候选池按数据效用选出代表，再执行严格 MMR；保证三套策略各一、图型随数据变化。
   const finalists = order
     .map((strategy) => {
@@ -361,13 +451,32 @@ export function buildPlans(analysis, opts) {
           }
         }
       }
-      if (preferenceCandidateId) {
-        const pref = pool.find((c) => c.strategy === strategy && c.candidateId === preferenceCandidateId)
-        if (pref) return pref
+      if (preferenceCandidateId && (strategy === 'clarity' || !structuredComparison)) {
+        // 第一张严格按用户点名的图型；其余两张是保持同一数据与字段约束的系统推荐替代方案。
+        const sameType = pool.find((c) => c.strategy === strategy && c.chartType === clarifyCandidate.chartType && c.executable !== false)
+        if (sameType) return { ...sameType, features: strategyFeatures(sameType, strategy) }
+        const compatible = pool.find((c) => c.chartType === clarifyCandidate.chartType && c.executable !== false)
+        if (compatible) return {
+          ...compatible,
+          candidateId: `${compatible.candidateId}_${strategy}`,
+          strategy,
+          features: strategyFeatures(compatible, strategy)
+        }
       }
-      return pool
+      const picked = pool
         .filter((candidate) => candidate.strategy === strategy && candidate.executable !== false && candidate.candidateId !== preferenceCandidateId)
         .sort((a, b) => b.score.total - a.score.total || a.candidateId.localeCompare(b.candidateId))[0]
+      if (structuredComparison && summary.timeGrouped && strategy === 'convention') {
+        const base = pool.find((candidate) => candidate.chartType === 'grouped_bar' && candidate.executable !== false)
+        if (base) return { ...base, candidateId: 'requested_group_box_convention', chartType: 'box_plot', strategy: 'convention', features: strategyFeatures({ ...base, chartType: 'box_plot' }, 'convention') }
+      }
+      // 长表只有一个真实测量列时，密度推荐不能退回双指标复合图；
+      // 复制可执行的分组柱候选并保留 density 角色，避免把组名当成 CSV 列名。
+      if (structuredComparison && strategy === 'density' && (summary.groups || summary.timeGrouped)) {
+        const groupedAlternative = pool.find((candidate) => candidate.chartType === 'grouped_bar' && candidate.executable !== false)
+        if (groupedAlternative) return { ...groupedAlternative, candidateId: 'requested_group_bar_density', chartType: 'grouped_bar_error', strategy: 'density', features: strategyFeatures({ ...groupedAlternative, chartType: 'grouped_bar_error' }, 'density') }
+      }
+      return picked
     })
     .filter(Boolean)
   const selection = selectMMR(finalists, { k: 3, lambda, executableOnly: true, strict: true })
@@ -397,6 +506,7 @@ export function buildPlans(analysis, opts) {
                   : chartType.includes('heatmap') ? 'heatmap'
                     : chartType === 'dual_axis' ? 'dual_axis'
                       : chartType === 'surface3d' ? 'surface3d'
+                      : chartType === 'cone3d' || chartType === 'line3d' || chartType === 'filled_line3d' ? chartType
                         : chartType === 'scatter3d' ? 'scatter3d'
                           : chartType.includes('scatter') ? 'scatter'
                             : 'line'
@@ -404,16 +514,41 @@ export function buildPlans(analysis, opts) {
     // 否则保持宽表多测量系列（含 _sd 误差棒）。
     // 复合多面板方案（density：趋势+归一化）与逐行/逐列图型（森林/配对连线/堆叠柱）不采用组均值聚合：
     // forest 需要逐条目 CI、paired 需要逐行配对、stacked 需要逐行多系列累加，保持原始行语义。
-    const groupsShape = summary.groups && (strategy !== 'density' || explicitBar) && !['forest', 'paired_dot', 'stacked_area'].includes(candidate.chartType)
-      ? summary.groups : null
+    const timeGroupedShape = summary.timeGrouped
+      ? {
+          groupCol: summary.groupLabel,
+          measure: summary.measureLabel,
+          xCol: summary.xLabel,
+          x: summary.x,
+          series: (summary.series ?? []).map((item) => ({
+            id: item.id,
+            label: item.label,
+            y: item.y,
+            yerr: item.yerr,
+            sd: item.sd,
+            n: item.n,
+            ciLow: item.ciLow,
+            ciHigh: item.ciHigh,
+            values: item.values
+          }))
+        }
+      : null
+    // 分组/时间聚合是数据语义，不应因展示策略切换而丢失。此前 density
+    // 策略跳过 groupsShape，导致系列标签（如“对照组”）被当成 CSV 列名。
+    // 只有逐行语义的森林图、配对图和堆叠图例外保留原始行结构。
+    const groupsShape = (summary.groups ?? timeGroupedShape) && (strategy !== 'density' || explicitBar || structuredComparison) && !['forest', 'paired_dot', 'stacked_area'].includes(candidate.chartType)
+      ? (summary.groups ?? timeGroupedShape) : null
+    const isTimeGrouped = Boolean(summary.timeGrouped && groupsShape?.xCol)
     const series = groupsShape
       ? groupsShape.series.map((g, i) => ({
           id: g.id,
           label: g.label,
           color: palette.colors[i] ?? palette.colors[palette.colors.length - 1],
           x: groupsShape.x,
-          y: groupsShape.x.map(label => label === g.label ? g.y : null),
-          yerr: groupsShape.x.map(label => label === g.label ? (/标准差|standard\s*deviation|(?:^|[^a-z])sd(?:[^a-z]|$)/i.test(userRequest) ? g.sd : g.yerr) : null),
+          y: isTimeGrouped ? g.y : groupsShape.x.map(label => label === g.label ? g.y : null),
+          yerr: isTimeGrouped
+            ? (/标准差|standard\s*deviation|(?:^|[^a-z])sd(?:[^a-z]|$)/i.test(userRequest) ? g.sd : g.yerr)
+            : groupsShape.x.map(label => label === g.label ? (/标准差|standard\s*deviation|(?:^|[^a-z])sd(?:[^a-z]|$)/i.test(userRequest) ? g.sd : g.yerr) : null),
           n: g.n,
           sd: g.sd,
           ciLow: g.ciLow,
@@ -443,10 +578,27 @@ export function buildPlans(analysis, opts) {
     const chartLabel = CHART_LABEL[candidate.chartType] ?? candidate.chartType
     const defaultTitle = safeTitleBase
     // 澄清结果 → 标题/图注/排版：用户未提供时按科研制图默认
-    const { title, caption, typography } = resolvePresentation(clarification, { title: defaultTitle, figureIndex: 1 })
+    const { title, caption, typography } = resolvePresentation(effectiveClarification, { title: defaultTitle, figureIndex: 1 })
+    const chartExtraMeasures = (summary.groups ?? timeGroupedShape) && candidate.chartType === 'forest' ? [(summary.groups ?? timeGroupedShape).measure] : measures
     const spec = groupsShape
-      ? applyGroupAnnotations(makeCandidateSpec(candidate, strategy, title, xLabel, yLabel, series), summary, evidence)
-      : makeCandidateSpec(candidate, strategy, title, xLabel, yLabel, series, buildChartExtra(candidate.chartType, measures, evidence))
+      ? applyGroupAnnotations(makeCandidateSpec(candidate, strategy, title, xLabel, yLabel, series), { ...summary, groups: groupsShape }, evidence)
+      : makeCandidateSpec(candidate, strategy, title, xLabel, yLabel, series, buildChartExtra(candidate.chartType, chartExtraMeasures, evidence))
+    spec.figure.displayedFields = [xLabel, ...measures].filter(Boolean)
+    // 仅记录真实数据字段；“测量值”等展示性泛称不应被当作字段参与一致性校验。
+    spec.figure.titleFields = [requestedYField].filter(Boolean)
+    spec.figure.groupField = taskSpec?.fieldSlots?.groupField ?? groupsShape?.groupCol ?? null
+    spec.figure.errorField = taskSpec?.fieldSlots?.errorField ?? null
+    spec.figure.zField = requestedZField ?? null
+    const units = analysis.semanticModel?.units ?? {}
+    for (const panel of spec.panels ?? []) for (const scale of panel.scales ?? []) {
+      const field = scale.axis === 'x' ? xLabel : yLabel
+      const unit = units[field]?.confirmed ?? units[field]?.original
+      if (unit) scale.unit = unit
+    }
+    // 将实际横轴类别数写入规格，供视觉质量门禁阻断“36 个样本编号挤在横轴”的不可读图。
+    for (const panel of spec.panels ?? []) {
+      if (panel.categoryCount == null) panel.categoryCount = Array.isArray(summary.x) ? summary.x.length : undefined
+    }
     if (explicitBar) for (const panel of spec.panels) {
       if (strategy === 'convention') {
         panel.barHatch = '//'
@@ -455,7 +607,7 @@ export function buildPlans(analysis, opts) {
       if (strategy === 'density' && groupsShape) { panel.showObservations = true; panel.barAlpha = 0.65 }
     }
     if (groupsShape && /标准差|standard\s*deviation|(?:^|[^a-z])sd(?:[^a-z]|$)/i.test(userRequest)) {
-      for (const panel of spec.panels) panel.errorBarMode = 'sd'
+      for (const panel of spec.panels) { panel.errorBarMode = 'sd'; panel.errorBarDefinition = '标准差 SD；每个时间点/分组同时记录有效样本量 n' }
       for (const panel of spec.panels) for (const layer of panel.layers ?? []) {
         if (layer.yerr !== undefined) layer.yerr = groupsShape.series.map(g => g.sd)
       }
@@ -468,11 +620,29 @@ export function buildPlans(analysis, opts) {
     spec.figure.fontFamily = rules.font
     spec.figure.minFontSize = rules.minFontSize
     spec.figure.avoidOverlap = true
+    // 三维图的二次处理仅作用于绘图派生数据，原始数据与证据链保持不变。
+    if (effectiveClarification?.secondaryProcessing) spec.figure.secondaryProcessing = effectiveClarification.secondaryProcessing
     applyTypographyToSpec(spec, typography)
-    const spatialMeasures = candidate.chartType === 'surface3d' || candidate.chartType === 'scatter3d'
-      ? (analysis.chartContext?.spatialFields ?? []).slice(0, 3)
+    const spatialMeasures = ['surface3d', 'scatter3d', 'cone3d', 'line3d', 'filled_line3d'].includes(candidate.chartType)
+      ? (requestedZField && requestedXField && requestedYField
+        ? [requestedXField, requestedYField, requestedZField]
+        : (analysis.chartContext?.spatialFields ?? []).slice(0, 3))
       : measures
-    const codegenInput = { fileName, x: xLabel, xLabel: requestedXLabel || xLabel, measures: spatialMeasures.length >= 3 ? spatialMeasures : measures, title, yLabel, outputBase: planId, dpi: rules.dpi, fontFamily: rules.font, minFontSize: rules.minFontSize, colors: explicitBar && strategy === 'convention' ? ['#777777'] : palette.colors }
+    // 长表/时间×分组聚合时，series label 是“对照组/处理组”等组值，
+    // 真实 CSV 列仍只有 groupsShape.measure（如“响应指标”）。代码生成必须使用后者，
+    // 防止把组值误当成不存在的数据列。
+    const plottedMeasures = groupsShape
+      ? [groupsShape.measure]
+      : ((summary.groups ?? timeGroupedShape) && ['forest', 'paired_dot', 'stacked_area'].includes(candidate.chartType) ? [(summary.groups ?? timeGroupedShape).measure] : measures)
+    const codegenMeasures = spatialMeasures.length >= 3 && !groupsShape ? spatialMeasures : plottedMeasures
+    const codegenInput = {
+      fileName, x: xLabel, xLabel: requestedXLabel || xLabel, measures: codegenMeasures,
+      title, yLabel, outputBase: planId, dpi: rules.dpi, fontFamily: rules.font,
+      minFontSize: rules.minFontSize,
+      colors: explicitBar && strategy === 'convention' ? ['#777777'] : palette.colors,
+      caption: groupsShape ? '点表示组均值，误差线表示系统识别的离散程度；每个时间点按实验组聚合。' : '图表由灵感视界依据数据字段、图表意图与展示偏好自动生成。'
+    }
+    spec.figure.caption = codegenInput.caption
     // v0.4.1：分组形态（spec.panel.groups 已注入）必须走 spec 驱动生成（含组聚合/误差棒/显著性标注）；
     // 宽表 canonical 方案保持既有模板路径（已验证基线）。
     const hasGroupPanels = (spec.panels ?? []).some((panel) => panel.groups)
@@ -493,7 +663,7 @@ export function buildPlans(analysis, opts) {
     // v0.4.1：图表解读文案（结构化要点 + 可改写分析段落 + 图注建议），全部数字来自证据账本
     const interpretation = buildInterpretation({
       summary, evidence, claims,
-      clarification, chartType: candidate.chartType, strategy,
+      clarification: effectiveClarification, chartType: candidate.chartType, strategy,
       title, caption
     })
     const dataProcessingTrace = analysis.processingTrace ? {
@@ -519,11 +689,14 @@ export function buildPlans(analysis, opts) {
       plan_id: planId,
       candidateId: candidate.candidateId,
       strategy,
+      comparisonRole: strategy === 'clarity' && preferenceCandidateId ? 'user_request' : `system_recommended_${strategy}`,
       name: `${m.name.split('·')[0].trim()} · ${chartLabel}`,
       rationale: explicitBar
         ? `遵循指定柱状图：${strategy === 'clarity' ? '突出组均值与误差棒，便于快速比较' : strategy === 'convention' ? '灰度呈现，便于论文黑白打印' : '保留均值误差棒并展示组内原始观测，便于检查数据分布'}。`
         : `${m.rationale} 本次根据数据形态选择 ${chartLabel}。`,
       chartType: chartLabel,
+      requestedChartType: effectiveClarification?.chartType ?? 'auto',
+      taskSpec: taskSpec ? { fieldSlots: taskSpec.fieldSlots ?? {}, pendingFields: taskSpec.pendingFields ?? [] } : null,
       engine,
       spec,
       series,
@@ -588,7 +761,7 @@ export function buildPlans(analysis, opts) {
     warnings: selection.warnings,
     // 澄清偏好强制结果：用户指定的图型是否进入三套方案
     clarification: {
-      chartType: clarification?.chartType ?? 'auto',
+      chartType: effectiveClarification?.chartType ?? 'auto',
       forcedCandidate: clarifyCandidate ? { candidateId: clarifyCandidate.candidateId, chartType: clarifyCandidate.chartType, strategy: clarifyCandidate.strategy } : null,
       forced: Boolean(clarifyForced),
       infeasible: Boolean(clarifyTarget) && !clarifyForced ? (clarifyCandidate?.infeasibleReason ?? 'CANDIDATE_NOT_FOUND') : null,

@@ -3,8 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "科研绘图辅助智能体 · 共享 Web UI（网页端 / 桌面壳 / 插件 webview 复用）",
-  "license": "SEE LICENSE IN LICENSE",
+  "description": "科研绘图辅助智能体 · 三端共享 Web UI（网页端 / Tauri 桌面壳 / 插件 webview 复用）",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",

@@ -7,6 +7,39 @@ import { buildSemanticModel } from './semanticModel.js'
 
 const SD_PAIR_PATTERN = /_sd$/i
 
+// 主图测量指标排序：科研结果字段优先于环境控制变量和成本字段。
+// 角色仍完整保留在 semanticModel.fieldRoles.measure 中，只有“默认主图”使用该排序，
+// 避免把温度/湿度等控制变量误选为响应趋势的纵轴；用户显式指定字段时优先服从用户。
+function primaryMeasureScore(name) {
+  const text = String(name)
+  if (/(响应|结果|产量|response|outcome|yield)/i.test(text)) return 5
+  if (/(表达|expression)/i.test(text)) return 4
+  if (/(存活|survival)/i.test(text)) return 3
+  if (/(指标|测量|measurement|metric)/i.test(text)) return 2
+  if (/(温度|湿度|光照|经度|纬度|高程|temperature|humidity|longitude|latitude|elevation)/i.test(text)) return 0
+  if (/(成本|价格|费用|cost|price)/i.test(text)) return 1
+  return 1
+}
+
+function choosePrimaryMeasure(names) {
+  return [...names].sort((a, b) => primaryMeasureScore(b) - primaryMeasureScore(a) || String(a).localeCompare(String(b)))[0]
+}
+
+function linearTrend(values) {
+  const points = values.map((value, index) => ({ x: index, y: value })).filter((p) => Number.isFinite(p.y))
+  const n = points.length
+  if (n < 3) return { slope: null, intercept: null, r2: null, n }
+  const meanX = points.reduce((sum, p) => sum + p.x, 0) / n
+  const meanY = points.reduce((sum, p) => sum + p.y, 0) / n
+  const sxx = points.reduce((sum, p) => sum + (p.x - meanX) ** 2, 0)
+  const sxy = points.reduce((sum, p) => sum + (p.x - meanX) * (p.y - meanY), 0)
+  const slope = sxx ? sxy / sxx : 0
+  const intercept = meanY - slope * meanX
+  const sst = points.reduce((sum, p) => sum + (p.y - meanY) ** 2, 0)
+  const sse = points.reduce((sum, p) => sum + (p.y - (intercept + slope * p.x)) ** 2, 0)
+  return { slope, intercept, r2: sst ? Math.max(0, 1 - sse / sst) : 0, n }
+}
+
 /**
  * 从已解析文本聚合测量系列（与 apps/web/src/lib/summarize.ts 同构）。
  * x 轴：优先分类/时间列，否则第一数值列；测量列：其余数值列（排除 sd/std/... 后缀），最多 4 个。
@@ -19,7 +52,37 @@ function summarizeCsv(text, rawDelimiter, profile) {
   const rows = matrix.slice(1)
   const col = (name) => header.indexOf(name)
 
+  // 时间×分组×重复是科研时序数据的常见结构。先按“时间、组别”聚合，
+  // 再把均值和误差传给绘图层，避免把每个样本编号误当成横轴观测点。
+  if (roles.xTime.length && roles.group.length && roles.measure.length) {
+    const timeLabel = roles.xTime[0]
+    const groupLabel = roles.group[0]
+    const measureLabel = choosePrimaryMeasure(roles.measure)
+    const ti = col(timeLabel); const gi = col(groupLabel); const mi = col(measureLabel)
+    const times = [...new Set(rows.map(r => String(r[ti] ?? '').trim()).filter(Boolean))]
+    const groups = [...new Set(rows.map(r => String(r[gi] ?? '').trim()).filter(Boolean))]
+    const aggregate = (values) => {
+      const clean = values.filter(Number.isFinite)
+      const n = clean.length
+      if (!n) return { mean: null, sd: null, se: null, n: 0, values: [] }
+      const mean = clean.reduce((s, v) => s + v, 0) / n
+      const sd = n > 1 ? Math.sqrt(clean.reduce((s, v) => s + (v - mean) ** 2, 0) / (n - 1)) : 0
+      return { mean: round(mean), sd: round(sd), se: round(n > 1 ? sd / Math.sqrt(n) : 0), n, values: clean }
+    }
+    const series = groups.map((group, index) => {
+      const cells = times.map(time => aggregate(rows.filter(r => String(r[gi] ?? '').trim() === group && String(r[ti] ?? '').trim() === time).map(r => toNumber(r[mi]))))
+      return {
+        id: `time_group_${index}`, label: group, x: times,
+        y: cells.map(c => c.mean), yerr: cells.map(c => c.se),
+        yerrKind: 'se', n: cells.map(c => c.n), sd: cells.map(c => c.sd),
+        values: cells.flatMap(c => c.values), aggregation: { by: [timeLabel, groupLabel], measure: measureLabel, error: 'se' }
+      }
+    })
+    return { xLabel: timeLabel, x: times, series, header, rows, timeGrouped: true, groupLabel, measureLabel }
+  }
+
   const xCol =
+    profile.columns.find((c) => roles.xTime.includes(c.name)) ??
     profile.columns.find((c) => ['categorical', 'datetime'].includes(c.userType ?? c.inferredType)) ??
     profile.columns.find((c) => (c.userType ?? c.inferredType) === 'numeric')
   const xIdx = xCol ? col(xCol.name) : 0
@@ -48,7 +111,7 @@ function summarizeCsv(text, rawDelimiter, profile) {
     return item
   })
 
-  return { xLabel, x, series, header, rows }
+  return { xLabel, x, series, header, rows, timeGrouped: false }
 }
 
 const fmt = (n, d = 3) => {
@@ -56,6 +119,8 @@ const fmt = (n, d = 3) => {
   const r = Math.round(n * 10 ** d) / 10 ** d
   return String(r)
 }
+// 发布口径：避免浮点下溢后把极小概率写成“p=0”。
+const fmtP = (p, d = 6) => Number.isFinite(p) && p < 0.001 ? 'p<0.001' : `p=${fmt(p, d)}`
 const pct = (r) => `${(r * 100).toFixed(1)}%`
 const round = (value, digits = 6) => Number.isFinite(value) ? Number(value.toFixed(digits)) : null
 
@@ -513,9 +578,9 @@ export function summarizeGroups(profile, text, rawDelimiter) {
   // 取唯一取值数量最适中的分组列（优先 3~6 组）
   candidates.sort((a, b) => Number(roles.group.includes(b.col.name)) - Number(roles.group.includes(a.col.name)) || Math.abs(a.count - 4) - Math.abs(b.count - 4) || a.count - b.count)
   const { col: groupCol, idx: gIdx, uniq: groups } = candidates[0]
-  const measureCol = profile.columns.find((c) =>
-    measures.has(c.name) && c.name !== groupCol.name
-  )
+  const measureNames = [...measures].filter((name) => name !== groupCol.name)
+  const primaryMeasure = choosePrimaryMeasure(measureNames)
+  const measureCol = profile.columns.find((c) => c.name === primaryMeasure)
   if (!measureCol) return null
   const mIdx = col(measureCol.name)
   const series = groups.map((name) => {
@@ -669,6 +734,7 @@ export function runDeterministicAnalysis({ profile, text, rawDelimiter, fileName
       : first === 0
         ? `${fmt(first, 1)} → ${fmt(last, 1)}（绝对变化 ${absChange >= 0 ? '+' : ''}${absChange}；基线为 0，百分比变化未定义）`
         : `${fmt(first, 1)} → ${fmt(last, 1)}（${pctChange >= 0 ? '+' : ''}${pctChange}%）`
+    const fit = linearTrend(s.y)
     evidence.push({
       evidence_id: `ev_trend_${i}`,
       tool: 'stats.trend',
@@ -676,7 +742,7 @@ export function runDeterministicAnalysis({ profile, text, rawDelimiter, fileName
       fields: [s.label],
       scope: `${summary.xLabel}=${summary.x[firstObserved?.index ?? 0]} → ${summary.x[lastObserved?.index ?? summary.x.length - 1]}`,
       value: trendValue,
-      details: { first, last, pctChange, absChange },
+      details: { first, last, pctChange, absChange, slope: fit.slope, intercept: fit.intercept, r2: fit.r2, n: fit.n, xUnit: '观测序号' },
       note: first === 0 ? '基线为 0，百分比变化未定义；仅报告绝对变化，不代表处理导致变化（相关 ≠ 因果，AGT-010）' : '仅描述观测区间内的变化，不代表处理导致变化（相关 ≠ 因果，AGT-010）'
     })
   })
@@ -727,7 +793,13 @@ export function runDeterministicAnalysis({ profile, text, rawDelimiter, fileName
     evidence.push({ evidence_id: `ev_ci_${index}`, tool: 'stats.confidence_interval', method: 'two-sided t interval for mean', metric: `「${series.label}」均值 95% 置信区间`, fields: [series.label], scope: `非缺失值 n=${ci.n}`, value: ci.lower === null ? `未执行：${ci.reason}` : `mean=${fmt(ci.mean)}；95% CI=[${fmt(ci.lower)}, ${fmt(ci.upper)}]`, details: ci })
   })
 
-  const numericColumns = profile.columns.filter((column) => (column.userType ?? column.inferredType) === 'numeric' && !isSdColumn(column.name))
+  // 相关/显著性只对“测量变量”执行；样本编号、重复编号、时间编码等数值标识不得进入成对检验。
+  // 若调用方未提供语义模型，保持旧行为以兼容独立统计 API；有语义模型时严格采用 measure 角色。
+  const semanticMeasures = new Set(semanticModel?.fieldRoles?.measure ?? [])
+  const numericColumns = profile.columns.filter((column) => {
+    if ((column.userType ?? column.inferredType) !== 'numeric' || isSdColumn(column.name)) return false
+    return semanticModel ? semanticMeasures.has(column.name) : true
+  })
   const numericValues = new Map(numericColumns.map((column) => {
     const index = summary.header.indexOf(column.name)
     return [column.name, summary.rows.map((row) => toNumber(row[index]))]
@@ -742,9 +814,9 @@ export function runDeterministicAnalysis({ profile, text, rawDelimiter, fileName
       const correlation = pearson(numericValues.get(left), numericValues.get(right))
       evidence.push({ evidence_id: `ev_corr_${id}`, tool: 'stats.correlation', method: 'Pearson product-moment correlation (pairwise complete)', metric: `${left} 与 ${right} 的 Pearson 相关`, fields: [left, right], scope: `成对非缺失观测 n=${correlation.n}`, value: correlation.r === null ? `r=NA；${correlation.reason}` : `r=${fmt(correlation.r, 6)}；n=${correlation.n}`, details: correlation, note: '相关不代表因果', ...inferenceMeta({ fields: [left, right], n: correlation.n, assumptions: ['线性关系', '连续等距尺度', '成对完整观测'] }) })
       const significance = correlationSignificance(correlation)
-      const significanceEvidence = { evidence_id: `ev_significance_${id}`, tool: 'stats.significance', method: 'Pearson correlation t-test', metric: `${left} 与 ${right} 的相关显著性`, fields: [left, right], scope: `成对非缺失观测 n=${correlation.n}`, value: significance.performed ? `r=${fmt(significance.r, 6)}；t=${fmt(significance.statistic, 6)}；df=${significance.df}；p=${fmt(significance.pValue, 6)}；alpha=0.05` : `未执行：${significance.reason}`, details: significance, note: designGated ? '研究设计未确认（unknown），显著性结论已门禁，不输出 claim' : '仅检验线性相关是否偏离 0；独立性与抽样设计需由用户确认，不支持因果结论', ...inferenceMeta({ fields: [left, right], n: correlation.n, assumptions: ['近似正态分布', '独立观测'], failedAssumptions: designGated ? ['researchDesign=unknown'] : [] }) }
+      const significanceEvidence = { evidence_id: `ev_significance_${id}`, tool: 'stats.significance', method: 'Pearson correlation t-test', metric: `${left} 与 ${right} 的相关显著性`, fields: [left, right], scope: `成对非缺失观测 n=${correlation.n}`, value: significance.performed ? `r=${fmt(significance.r, 6)}；t=${fmt(significance.statistic, 6)}；df=${significance.df}；${fmtP(significance.pValue)}；alpha=0.05` : `未执行：${significance.reason}`, details: significance, note: designGated ? '研究设计未确认（unknown），显著性结论已门禁，不输出 claim' : '仅检验线性相关是否偏离 0；独立性与抽样设计需由用户确认，不支持因果结论', ...inferenceMeta({ fields: [left, right], n: correlation.n, assumptions: ['近似正态分布', '独立观测'], failedAssumptions: designGated ? ['researchDesign=unknown'] : [] }) }
       evidence.push(significanceEvidence)
-      if (significance.performed && allowSignificanceClaim) significanceClaims.push({ claimId: `claim_significance_${id}`, evidenceId: significanceEvidence.evidence_id, fields: [left, right], sampleScope: significanceEvidence.scope, numbers: [significance.r, significance.pValue], relation: 'significance', text: `${left} 与 ${right} 的 Pearson 相关检验 p=${fmt(significance.pValue, 6)}` })
+      if (significance.performed && allowSignificanceClaim) significanceClaims.push({ claimId: `claim_significance_${id}`, evidenceId: significanceEvidence.evidence_id, fields: [left, right], sampleScope: significanceEvidence.scope, numbers: [significance.r, significance.pValue], relation: 'significance', text: `${left} 与 ${right} 的 Pearson 相关检验 ${fmtP(significance.pValue)}` })
     }
   }
 
@@ -809,7 +881,7 @@ export function runDeterministicAnalysis({ profile, text, rawDelimiter, fileName
   const groupClaims = []
   if (groupAnalysis) {
     const groups = groupAnalysis.series
-    summary.groups = {
+    if (!summary.timeGrouped) summary.groups = {
       groupCol: groupAnalysis.groupCol,
       measure: groupAnalysis.measure,
       x: groupAnalysis.x,
@@ -833,7 +905,7 @@ export function runDeterministicAnalysis({ profile, text, rawDelimiter, fileName
       fields: [groupAnalysis.groupCol],
       scope: `k=${anova.k} 组，n=${anova.n}，df=${anova.dfBetween},${anova.dfWithin}`,
       value: anova.performed
-        ? `F=${fmt(anova.statistic, 6)}；p=${fmt(anova.pValue, 6)}；η²=${fmt(anova.etaSq, 6)}；alpha=0.05`
+        ? `F=${fmt(anova.statistic, 6)}；${fmtP(anova.pValue)}；η²=${fmt(anova.etaSq, 6)}；alpha=0.05`
         : `未执行：${anova.reason}`,
       details: anova,
       note: designGated ? '研究设计未确认（unknown），ANOVA 结论仅记录不输出 claim' : 'ANOVA 检验组均值间是否存在整体差异；显著不指向具体哪两组，需结合两两比较',
@@ -866,7 +938,7 @@ export function runDeterministicAnalysis({ profile, text, rawDelimiter, fileName
         fields: [groupAnalysis.groupCol],
         scope: `n1=${test.n1}, n2=${test.n2}`,
         value: test.performed
-          ? `mean1=${fmt(test.mean1, 6)}；mean2=${fmt(test.mean2, 6)}；t=${fmt(test.statistic, 6)}；df=${fmt(test.df, 6)}；p=${fmt(test.pValue, 6)}；p_adjusted=${fmt(adjusted, 6)}（Holm）；stars=${significanceStars(adjusted) ?? 'ns'}`
+          ? `mean1=${fmt(test.mean1, 6)}；mean2=${fmt(test.mean2, 6)}；t=${fmt(test.statistic, 6)}；df=${fmt(test.df, 6)}；${fmtP(test.pValue)}；p_adjusted=${fmt(adjusted, 6)}（Holm）；stars=${significanceStars(adjusted) ?? 'ns'}`
           : `未执行：${test.reason}`,
         details: { left: groups[i].label, right: groups[j].label, ...test, pAdjusted: adjusted, stars: significanceStars(adjusted) },
         note: '两两比较 p 值经 Holm-Bonferroni 多重比较校正，图上星号基于校正后 p 值',
@@ -881,7 +953,7 @@ export function runDeterministicAnalysis({ profile, text, rawDelimiter, fileName
           sampleScope: tEvidence.scope,
           numbers: [test.mean1, test.mean2, adjusted],
           relation: 'significance',
-          text: `${groups[i].label} 与 ${groups[j].label} 组间均值差异显著（t=${fmt(test.statistic, 6)}，p_adj=${fmt(adjusted, 6)}）`
+        text: `${groups[i].label} 与 ${groups[j].label} 组间均值差异显著（t=${fmt(test.statistic, 6)}，p_adj=${adjusted < 0.001 ? '<0.001' : fmt(adjusted, 6)}）`
         })
       }
     })
@@ -893,7 +965,7 @@ export function runDeterministicAnalysis({ profile, text, rawDelimiter, fileName
         sampleScope: anovaEvidence.scope,
         numbers: [anova.statistic, anova.pValue],
         relation: 'significance',
-        text: `单因素方差分析显示 ${groupAnalysis.groupCol} 组间差异显著（F=${fmt(anova.statistic, 6)}，p=${fmt(anova.pValue, 6)}）`
+        text: `单因素方差分析显示 ${groupAnalysis.groupCol} 组间差异显著（F=${fmt(anova.statistic, 6)}，${fmtP(anova.pValue)}）`
       })
     }
   } else if (summary.series.length >= 2 && summary.series.length <= 4) {
@@ -1015,7 +1087,24 @@ export function runDeterministicAnalysis({ profile, text, rawDelimiter, fileName
   claims.push(...significanceClaims, ...groupClaims)
 
   const numericFields = profile.columns.filter((c) => (c.userType ?? c.inferredType) === 'numeric' && !isSdColumn(c.name)).map((c) => c.name)
-  const spatialFields = numericFields.filter((name) => /^(x|y|z|lat|latitude|lon|long|longitude|east(?:ing)?|north(?:ing)?|depth|elevation|height)$/i.test(name.trim()))
+  // 空间字段既支持英文标准列名，也支持科研数据中常见的中文坐标命名；仅凭“有三列数值”
+  // 不足以进入三维候选，避免把处理组/响应指标误当成 XYZ。
+  const spatialFields = numericFields.filter((name) => /^(x|y|z|x坐标|y坐标|z坐标|横坐标|纵坐标|深度|纬度|经度|高程|高度|lat|latitude|lon|long|longitude|east(?:ing)?|north(?:ing)?|depth|elevation|height)$/i.test(name.trim()))
+  const spatialValues = new Map(spatialFields.map((name) => {
+    const idx = profile.columns.findIndex((column) => column.name === name)
+    const values = (parseCsv(text, rawDelimiter).slice(1) ?? []).map((row) => toNumber(row[idx])).filter(Number.isFinite)
+    return [name, { unique: new Set(values).size, finite: values.length }]
+  }))
+  const spatialRows = parseCsv(text, rawDelimiter).slice(1)
+  const spatialIndices = spatialFields.map((name) => profile.columns.findIndex((column) => column.name === name))
+  const spatialDiagnostics = {
+    fields: spatialFields,
+    completeRows: spatialFields.length >= 3
+      ? spatialRows.filter((row) => spatialIndices.every((index) => Number.isFinite(toNumber(row[index])))).length
+      : 0,
+    uniqueCounts: Object.fromEntries([...spatialValues.entries()].map(([name, value]) => [name, value.unique])),
+    varied: spatialFields.length >= 3 && [...spatialValues.values()].slice(0, 3).every((value) => value.unique >= 2)
+  }
   const overview = buildDataOverview(text, rawDelimiter, profile)
   const processingTrace = {
     schema: 'deep-imaging.data-processing.v1',
@@ -1025,6 +1114,7 @@ export function runDeterministicAnalysis({ profile, text, rawDelimiter, fileName
     operations: [
       { id: 'parse_csv', description: '按原始 CSV 表头解析数据；未对数据行排序或筛选' },
       { id: 'parse_numeric', description: '数值字段转换为数值；空白/非法值保留为缺失，不进行插补' },
+      ...(summary.timeGrouped ? [{ id: 'time_group_aggregate', scope: 'plotting', timeField: summary.xLabel, groupField: summary.groupLabel, measure: summary.measureLabel, error: 'se', description: '按时间×分组聚合均值与标准误；原始观测保留在 values/n 中' }] : []),
       ...(summary.groups ? [{ id: 'group_summary', scope: 'evidence_only', groupField: summary.groups.groupCol, measure: summary.groups.measure, description: '按组计算统计证据中的均值/标准误；是否用于图表聚合由每个方案单独记录' }] : [])
     ],
     series: summary.series.map((series) => ({
@@ -1044,13 +1134,15 @@ export function runDeterministicAnalysis({ profile, text, rawDelimiter, fileName
     plottedMeasures: summary.series.length,
     grouped: Boolean(summary.groups),
     warnings: [
+      ...(semanticModel?.fieldRoles?.xTime?.length && semanticModel?.fieldRoles?.group?.length && new Set(summary.x.map(String)).size < summary.x.length
+        ? ['检测到时间×分组重复观测；当前候选应按时间与分组聚合后绘图，禁止直接把重复样本编号铺满横轴'] : []),
       ...(summary.x.length < 3 ? ['观测数少于 3，趋势/回归类表达应谨慎'] : []),
       ...(summary.series.some((series) => series.values.length < series.y.length) ? ['至少一个绘图系列含缺失值；未插补，图形可能出现断点或少量点缺失'] : []),
       ...(overview.outliers.length ? [`检测到 ${overview.outliers.length} 个字段有 IQR/3σ 离群值提示；保留原始观测，请核对研究背景`] : []),
       ...(summary.groups?.series.some((group) => group.n < 2) ? ['至少一个分组有效样本量小于 2，无法稳定估计组内变异'] : [])
     ]
   }
-  return { summary, evidence, claims, chartContext: { numericFields, spatialFields, spatialReady: spatialFields.length >= 3 }, overview, processingTrace, suitabilityAudit, sdPairPattern: SD_PAIR_PATTERN }
+  return { summary, evidence, claims, semanticModel: semanticModel ?? null, chartContext: { numericFields, numericMeasureCount: numericFields.length, spatialFields, spatialReady: spatialFields.length >= 3 && spatialDiagnostics.completeRows >= 8 && spatialDiagnostics.varied, spatialDiagnostics }, overview, processingTrace, suitabilityAudit, sdPairPattern: SD_PAIR_PATTERN }
 }
 
 function collectEvidenceNumber(value) {

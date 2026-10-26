@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "灵感视界 SPARK SIGHT",
-    "description": "DeepSeek Harness 内的科研绘图助手：打开数据、生成图表方案、预览并导出可复现的论文配图。"
+    "description": "深度集成进 DeepSeek Harness：模型选择器旁的绘图开关、原生绘图预览页签、本机账户与 sparksight_* 工具，生成并导出可复现的论文配图。"
   }
 }

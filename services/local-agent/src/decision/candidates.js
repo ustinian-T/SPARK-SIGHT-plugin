@@ -20,6 +20,9 @@ const MAX_POOL_SIZE = 15
 export function dataSignals(analysis) {
   const seriesCount = analysis.summary.series.length
   const obsCount = analysis.summary.x.length
+  // 长表中 seriesCount 可能只是“组数”，不能代表可用于双轴/热力图/三维图的数值指标数。
+  // 优先读取语义模型确认的数值字段数量，缺失时兼容旧测试夹具回退到 seriesCount。
+  const numericMeasureCount = analysis.chartContext?.numericMeasureCount ?? analysis.chartContext?.numericFields?.length ?? seriesCount
   const hasErrorBars = analysis.summary.series.some((s) => Array.isArray(s.yerr)) || Boolean(analysis.summary.groups?.series?.some((s) => Array.isArray(s.yerr)))
   const errorBarKinds = analysis.summary.groups
     ? ['se']
@@ -34,7 +37,8 @@ export function dataSignals(analysis) {
   // v0.4.2：长表分组形态（分组列 + 数值列）→ 箱线+抖动/小提琴/误差棒点图天然契合
   const grouped = Boolean(analysis.summary.groups)
   const spatialReady = analysis.chartContext?.spatialReady === true && obsCount >= 4
-  return { seriesCount, obsCount, hasErrorBars, errorBarKinds, highDensity, groupComparison, trend, matrixLike, grouped, spatialReady }
+  const spatialDiagnostics = analysis.chartContext?.spatialDiagnostics ?? null
+  return { seriesCount, numericMeasureCount, obsCount, hasErrorBars, errorBarKinds, highDensity, groupComparison, trend, matrixLike, grouped, spatialReady, spatialDiagnostics }
 }
 
 export function candidateSubscores(candidate, signals, base) {
@@ -42,17 +46,17 @@ export function candidateSubscores(candidate, signals, base) {
   let DataFit = base.DataFit
   let TaskFit = base.TaskFit
   if (chartType.includes('heatmap')) {
-    DataFit = signals.matrixLike ? 0.98 : signals.seriesCount >= 3 ? 0.72 : 0.25
-    TaskFit = signals.matrixLike ? 0.96 : 0.62
+    DataFit = signals.numericMeasureCount >= 2 && signals.matrixLike ? 0.98 : signals.numericMeasureCount >= 2 ? 0.72 : 0.25
+    TaskFit = signals.numericMeasureCount >= 2 && signals.matrixLike ? 0.96 : 0.62
   } else if (chartType.includes('scatter3d')) {
-    DataFit = signals.seriesCount >= 3 ? 0.82 : 0.4
-    TaskFit = signals.seriesCount >= 3 ? 0.8 : 0.45
+    DataFit = signals.numericMeasureCount >= 3 ? 0.82 : 0.4
+    TaskFit = signals.numericMeasureCount >= 3 ? 0.8 : 0.45
   } else if (chartType.includes('surface3d')) {
-    DataFit = signals.seriesCount >= 3 && signals.obsCount >= 8 ? 0.88 : 0.42
-    TaskFit = signals.seriesCount >= 3 && signals.obsCount >= 8 ? 0.86 : 0.5
+    DataFit = signals.numericMeasureCount >= 3 && signals.spatialReady ? 0.88 : 0.42
+    TaskFit = signals.numericMeasureCount >= 3 && signals.spatialReady ? 0.86 : 0.5
   } else if (chartType.includes('dual_axis')) {
-    DataFit = signals.trend && signals.seriesCount >= 2 ? 0.86 : 0.55
-    TaskFit = signals.trend && signals.seriesCount >= 2 ? 0.84 : 0.58
+    DataFit = signals.trend && signals.numericMeasureCount >= 2 ? 0.86 : 0.55
+    TaskFit = signals.trend && signals.numericMeasureCount >= 2 ? 0.84 : 0.58
   } else if (chartType.includes('scatter')) {
     DataFit = signals.trend && signals.seriesCount >= 2 ? 0.9 : 0.64
     TaskFit = signals.trend ? 0.86 : 0.68
@@ -201,7 +205,7 @@ export function buildCandidatePool(analysis) {
       },
       base: 'c_convention_line_err',
       adjust: { DataFit: sig.seriesCount >= 2 ? 0.04 : -0.3, TaskFit: sig.seriesCount >= 3 ? 0.03 : -0.08 },
-      infeasibleReason: sig.seriesCount >= 2 ? null : 'HEATMAP_REQUIRES_TWO_NUMERIC_MEASURES'
+      infeasibleReason: sig.numericMeasureCount >= 2 ? null : 'HEATMAP_REQUIRES_TWO_NUMERIC_MEASURES'
     },
     {
       candidateId: 'c_clarity_scatter',
@@ -360,13 +364,13 @@ export function buildCandidatePool(analysis) {
       },
       base: 'c_convention_line_err',
       adjust: { TaskFit: 0.06, Readability: -0.06, ScientificConvention: 0.05 },
-      infeasibleReason: sig.seriesCount >= 2 ? null : 'DUAL_AXIS_REQUIRES_TWO_MEASURES'
+      infeasibleReason: sig.numericMeasureCount >= 2 ? null : 'DUAL_AXIS_REQUIRES_TWO_MEASURES'
     },
     {
       candidateId: 'c_density_surface3d',
       strategy: 'density',
       chartType: 'surface3d',
-      condition: sig.spatialReady && sig.obsCount >= 8,
+      condition: sig.spatialReady && sig.numericMeasureCount >= 3,
       features: {
         chartType: 'surface3d',
         layout: { rows: 1, cols: 1, panels: 1 },
@@ -377,13 +381,13 @@ export function buildCandidatePool(analysis) {
       },
       base: 'c_density_dual',
       adjust: { TaskFit: sig.trend ? 0.05 : -0.1, Readability: -0.15, ScientificConvention: -0.04 },
-      infeasibleReason: sig.spatialReady && sig.obsCount >= 8 ? null : 'SURFACE_REQUIRES_SPATIAL_COORDINATES_AND_THREE_NUMERIC_MEASURES'
+      infeasibleReason: sig.spatialReady && sig.numericMeasureCount >= 3 ? null : 'SURFACE_REQUIRES_SPATIAL_COORDINATES_AND_THREE_NUMERIC_MEASURES'
     },
     {
       candidateId: 'c_clarity_scatter3d',
       strategy: 'clarity',
       chartType: 'scatter3d',
-      condition: sig.spatialReady,
+      condition: sig.spatialReady && sig.numericMeasureCount >= 3,
       features: {
         chartType: 'scatter3d',
         layout: { rows: 1, cols: 1, panels: 1 },
@@ -394,7 +398,44 @@ export function buildCandidatePool(analysis) {
       },
       base: 'c_clarity_bar',
       adjust: { TaskFit: 0.03, Readability: -0.12, ScientificConvention: -0.04 },
-      infeasibleReason: sig.spatialReady ? null : 'SCATTER3D_REQUIRES_SPATIAL_COORDINATES_AND_THREE_NUMERIC_MEASURES'
+      infeasibleReason: sig.spatialReady && sig.numericMeasureCount >= 3 ? null : 'SCATTER3D_REQUIRES_SPATIAL_COORDINATES_AND_THREE_NUMERIC_MEASURES'
+    },
+    {
+      candidateId: 'c_density_cone3d',
+      strategy: 'density',
+      chartType: 'cone3d',
+      condition: sig.spatialReady && sig.numericMeasureCount >= 3,
+      features: {
+        chartType: 'cone3d',
+        layout: { rows: 1, cols: 1, panels: 1 },
+        encoding: { marks: ['cone'], xType: 'linear', errorBars: false, normalized: false, dimension: '3d' },
+        statPresentation: { raw: true, errorBars: false, normalized: false, significance: false },
+        color: { mode: 'sequential', monochromePrint: false },
+        annotation: { kinds: ['colorbar'], count: 1 }
+      },
+      base: 'c_density_dual',
+      adjust: { TaskFit: sig.trend ? 0.04 : -0.08, Readability: -0.1, ScientificConvention: -0.02 },
+      infeasibleReason: sig.spatialReady && sig.numericMeasureCount >= 3 ? null : 'CONE3D_REQUIRES_SPATIAL_COORDINATES_AND_THREE_NUMERIC_MEASURES'
+    },
+    {
+      candidateId: 'c_clarity_line3d',
+      strategy: 'clarity',
+      chartType: 'line3d',
+      condition: sig.spatialReady && sig.numericMeasureCount >= 3,
+      features: { chartType: 'line3d', layout: { rows: 1, cols: 1, panels: 1 }, encoding: { marks: ['line'], xType: 'linear', errorBars: false, normalized: false, dimension: '3d' }, statPresentation: { raw: true, errorBars: false, normalized: false, significance: false }, color: { mode: 'categorical', monochromePrint: false }, annotation: { kinds: [], count: 0 } },
+      base: 'c_clarity_bar',
+      adjust: { TaskFit: 0.06, Readability: -0.08, ScientificConvention: 0.02 },
+      infeasibleReason: sig.spatialReady && sig.numericMeasureCount >= 3 ? null : 'LINE3D_REQUIRES_SPATIAL_COORDINATES_AND_THREE_NUMERIC_MEASURES'
+    },
+    {
+      candidateId: 'c_density_filled_line3d',
+      strategy: 'density',
+      chartType: 'filled_line3d',
+      condition: sig.spatialReady && sig.numericMeasureCount >= 3,
+      features: { chartType: 'filled_line3d', layout: { rows: 1, cols: 1, panels: 1 }, encoding: { marks: ['line', 'area'], xType: 'linear', errorBars: false, normalized: false, dimension: '3d' }, statPresentation: { raw: true, errorBars: false, normalized: false, significance: false }, color: { mode: 'sequential', monochromePrint: false }, annotation: { kinds: ['colorbar'], count: 1 } },
+      base: 'c_density_dual',
+      adjust: { TaskFit: 0.06, Readability: -0.1, ScientificConvention: 0.01 },
+      infeasibleReason: sig.spatialReady && sig.numericMeasureCount >= 3 ? null : 'FILLED_LINE3D_REQUIRES_SPATIAL_COORDINATES_AND_THREE_NUMERIC_MEASURES'
     }
   ]
 
@@ -442,7 +483,7 @@ export function buildCandidatePool(analysis) {
   // 候选池规模约束 K ∈ [6,15]：条件候选过多时按效用分从低到高确定性裁剪。
   // v0.4.2：用户可显式点名的图型（热力/双Y轴/三维/箱线/小提琴/误差棒点图/堆叠/配对/森林）恒保留，
   // 保证 clarify 强制点名不被池裁剪静默吞掉；只裁剩余条件候选（如复合面板降级项）。
-  const KEEP_CHART_TYPES = new Set(['dual_axis', 'surface3d', 'scatter3d', 'panel_2x2', 'box_plot', 'violin_plot', 'dot_plot', 'stacked_area', 'paired_dot', 'forest', 'correlation_heatmap'])
+  const KEEP_CHART_TYPES = new Set(['dual_axis', 'surface3d', 'scatter3d', 'cone3d', 'line3d', 'filled_line3d', 'panel_2x2', 'box_plot', 'violin_plot', 'dot_plot', 'stacked_area', 'paired_dot', 'forest', 'correlation_heatmap'])
   if (pool.length > MAX_POOL_SIZE) {
     const excess = pool.length - MAX_POOL_SIZE
     const droppable = pool.filter((c) => c.conditional && !KEEP_CHART_TYPES.has(c.chartType))

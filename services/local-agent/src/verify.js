@@ -3,7 +3,7 @@
 import { createHash } from 'node:crypto'
 import { inflateSync } from 'node:zlib'
 import { parseCsv, toNumber } from './csv.js'
-import { validateSpecAgainstRules, checkCaption } from './plotRules.js'
+import { validateSpecAgainstRules, checkCaption, checkRequestedChartType, validateTitleLayerConsistency } from './plotRules.js'
 
 function isValidSvg(svg) {
   return typeof svg === 'string' && svg.includes('<svg') && svg.includes('</svg>') && svg.length > 500
@@ -242,9 +242,43 @@ function checkEvidenceConsistency({ plan, evidence, text, rawDelimiter }) {
   if (groupPanel) {
     const gIdx = header.indexOf(groupPanel.groups.groupCol)
     const mIdx = header.indexOf(groupPanel.groups.measure)
+    const xIdx = groupPanel.groups.xCol ? header.indexOf(groupPanel.groups.xCol) : -1
     if (gIdx < 0 || mIdx < 0) {
       return { passed: false, name: '证据一致性', detail: `分组列 ${groupPanel.groups.groupCol} 或测量列 ${groupPanel.groups.measure} 不在 CSV 列中` }
     }
+    // 时间×分组长表的 series.y 是“每个时间点、每个组”的聚合均值，
+    // 不能拿整组跨时间的总均值去比较第一个时间点。独立验证必须按
+    // (x, group) 单元格重算，同时保留 values 对原始观测的逐条核对。
+    if (xIdx >= 0) {
+      for (const s of plan.series) {
+        const sourceValues = rows.filter((r) => String(r[gIdx] ?? '').trim() === s.label).map((r) => toNumber(r[mIdx])).filter((v) => v !== null)
+        const plottedValues = (s.values ?? []).filter((v) => Number.isFinite(v))
+        if (sourceValues.length !== plottedValues.length || sourceValues.some((v, i) => Math.abs(v - plottedValues[i]) > 1e-9)) {
+          passed = false
+          details.push(`组「${s.label}」传入绘图的数据点与 CSV 原始有效观测不一致`)
+        }
+        const xValues = Array.isArray(s.x) ? s.x : []
+        const plotted = Array.isArray(s.y) ? s.y : []
+        for (let i = 0; i < xValues.length; i += 1) {
+          const cell = rows
+            .filter((r) => String(r[gIdx] ?? '').trim() === s.label && String(r[xIdx] ?? '').trim() === String(xValues[i]).trim())
+            .map((r) => toNumber(r[mIdx]))
+            .filter((v) => v !== null)
+          if (!cell.length || !Number.isFinite(plotted[i])) {
+            passed = false
+            details.push(`组「${s.label}」时间点「${xValues[i]}」缺少可验证的聚合均值`)
+            continue
+          }
+          const mean = cell.reduce((sum, value) => sum + value, 0) / cell.length
+          if (Math.abs(mean - plotted[i]) > 1e-3) {
+            passed = false
+            details.push(`组「${s.label}」时间点「${xValues[i]}」独立重算均值 ${mean.toFixed(3)} 与绘制值 ${plotted[i]} 不一致`)
+          }
+        }
+      }
+      // 时间×分组证据由 ev_trend_*、ev_errorbars 等共享证据账本提供，
+      // 不要求普通分组模式专用的 ev_group_stats。
+    } else {
     const sums = new Map()
     const counts = new Map()
     for (const r of rows) {
@@ -277,6 +311,7 @@ function checkEvidenceConsistency({ plan, evidence, text, rawDelimiter }) {
     if (!evidence.some((e) => e.evidence_id === 'ev_group_stats')) {
       passed = false
       details.push('缺少分组描述统计证据 ev_group_stats')
+    }
     }
   } else {
     for (const s of plan.series) {
@@ -366,6 +401,18 @@ function checkPlanDifference(plans, results) {
 // 禁彩虹色、图注「图X-X 对象方法功能」无括号；标题居中与配色数量为建议级，不阻断交付）
 function checkPlotRules(plan) {
   const violations = validateSpecAgainstRules(plan.spec ?? {})
+  const titleLayerCheck = validateTitleLayerConsistency(plan.spec ?? {})
+  for (const message of titleLayerCheck.errors) violations.push({ rule: 'title_layer_consistency', level: 'error', message })
+  // 结构化三方案比较中，只有“按用户要求”的第一套方案必须严格遵守
+  // 用户点名的图型；后两套是明确授权的系统推荐替代图型，不能再次被
+  // 用户图型一致性门禁误判为“静默替换”。普通任务没有 comparisonRole
+  // 标记，仍按原有规则对所有方案严格校验。
+  const requested = plan.comparisonRole && plan.comparisonRole !== 'user_request'
+    ? 'auto'
+    : plan.clarification?.chartType ?? plan.requestedChartType
+  const actual = plan.dataSuitability?.chartType ?? plan.spec?.chartType ?? plan.chartType
+  const consistency = checkRequestedChartType(requested, actual)
+  if (!consistency.ok) violations.push({ rule: 'requested_chart_type_mismatch', level: 'error', message: consistency.reason })
   const errors = violations.filter((v) => v.level === 'error')
   const warns = violations.filter((v) => v.level === 'warn')
   const caption = plan.caption ? checkCaption(plan.caption) : { ok: true }
@@ -398,7 +445,15 @@ export function checkChartSemanticQuality(plan) {
     else if (!/set_\{_axis\}lim|set_[xyz]lim/.test(plan.code?.python ?? '')) errors.push('三维图代码未显式按数据范围设置三轴范围')
     else if (!/view_init|view\(/.test(plan.code?.python ?? '')) warnings.push('三维图未声明观察视角，复现时视觉表达可能不稳定')
   }
-  if (kinds.includes('heatmap') && (plan.series?.length ?? 0) < 2) errors.push('热力图至少需要两个数值变量')
+  if (kinds.includes('heatmap')) {
+    if ((plan.series?.length ?? 0) < 2) errors.push('热力图至少需要两个数值变量')
+    const heatSeries = (plan.series ?? []).slice(0, 12).map((series) => series.values ?? series.y ?? [])
+    const completeRows = heatSeries.length >= 2
+      ? Math.max(0, ...Array.from({ length: Math.max(...heatSeries.map((values) => values.length), 0) }, (_, index) => heatSeries.every((values) => Number.isFinite(values[index])) ? index + 1 : 0))
+      : 0
+    if (completeRows < 3) errors.push('热力图至少需要 3 个完整观测构成稳定相关结构')
+    if (heatSeries.some((values) => uniqueCount(values) < 2)) warnings.push('热力图包含常量变量，相关系数未定义或解释价值有限')
+  }
   if (kinds.includes('forest')) {
     const forest = panels.find((panel) => panel.layers?.some((layer) => layer.kind === 'forest'))?.forest
     if (!forest?.mean) errors.push('森林图缺少效应量/均值字段声明')
@@ -477,10 +532,18 @@ export function verifyPlan(plan, result, ctx) {
     checkDeliveryReadiness(plan, result)
   ]
   const quality = summarizeQualityChecks(checks)
+  const semanticChecks = checks.filter((check) => ['图型语义与数据域', '证据一致性', '规格符合性', '科研制图规则'].includes(check.name))
+  const visualChecks = checks.filter((check) => ['SVG 安全与导出', 'SVG 文字布局', '最终渲染质量', '最终交付尺寸'].includes(check.name))
   return {
     passed: checks.every((c) => c.passed),
     checks,
     quality,
+    layers: {
+      execution: { passed: result.status === 'success', label: '执行通过' },
+      semantic: { passed: semanticChecks.every((c) => c.passed), label: '统计与语义通过' },
+      visual: { passed: visualChecks.every((c) => c.passed), label: '视觉验收通过' },
+      deliverable: { passed: result.status === 'success' && checks.every((c) => c.passed), label: '可用于正式汇报或论文' }
+    },
     artifactHash: svg ? createHash('sha256').update(svg).digest('hex') : undefined
   }
 }

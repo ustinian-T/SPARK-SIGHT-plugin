@@ -83,6 +83,7 @@ function pythonCode(strategy, c) {
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib.colors import LinearSegmentedColormap
 ${PY_PREAMBLE}
 df = pd.read_csv(${pyQ(c.fileName)})
 x_col = ${pyQ(c.x)}
@@ -104,6 +105,8 @@ ax.set_title(_fit_title(${pyQ(c.title)}), pad=14)
 ax.legend(frameon=False, ncol=min(len(measures), 3), loc="upper left")
 ax.spines[["top", "right"]].set_visible(False)
 ax.grid(True, linestyle="--", color="#C8C8C8", alpha=0.35, linewidth=0.6)
+${''} # 图注由结果分析区展示，不叠加到图内
+${''}
 fig.savefig("plan_clarity.png", dpi=${dpi}, facecolor="white")
 fig.savefig("plan_clarity.svg", facecolor="white")
 `
@@ -132,6 +135,8 @@ ax.set_ylabel(${pyQ(c.yLabel)})
 ax.set_title(_fit_title(${pyQ(c.title)}), pad=14)
 ax.legend(frameon=False, loc="upper left")
 # 显著性/参考线等注释由 AnnotationSpec 受控生成，避免人工硬编码
+${''} # 图注由结果分析区展示，不叠加到图内
+${''}
 fig.savefig("plan_convention.pdf", facecolor="white")
 fig.savefig("plan_convention.png", dpi=300, facecolor="white")
 fig.savefig("plan_convention.svg", facecolor="white")
@@ -160,6 +165,8 @@ for ax in (ax1, ax2):
     ax.grid(True, linestyle="--", color="#C8C8C8", alpha=0.3, linewidth=0.6)
     ax.legend(frameon=False, fontsize=8.5)
 fig.suptitle(_fit_title(${pyQ(c.title)}))
+${''} # 图注由结果分析区展示，不叠加到图内
+${''}
 fig.savefig("plan_density.png", dpi=${dpi}, facecolor="white")
 fig.savefig("plan_density.svg", facecolor="white")
 `
@@ -373,8 +380,33 @@ for _k, _s in enumerate(${serialized}):
 function groupedPython(panel, ax, kind) {
   const g = panel.groups
   const err = pyErrorColumn(panel)
-  const head = `grouped = df.groupby(${pyQ(g.groupCol)})[${pyQ(g.measure)}].agg(mean="mean", std="std", count="count", sem="sem")
-grouped = grouped.sort_index()
+  // 时间×分组长表必须按“时间、组别”聚合；只按组别聚合会把组值错误地变成横轴。
+  if (g.xCol) {
+    const timeHead = `grouped = df.groupby([${pyQ(g.xCol)}, ${pyQ(g.groupCol)}], sort=False)[${pyQ(g.measure)}].agg(mean="mean", std="std", count="count", sem="sem").reset_index()
+_xvals = list(pd.unique(df[${pyQ(g.xCol)}]))
+_groups = list(pd.unique(df[${pyQ(g.groupCol)}]))
+_xpos = np.arange(len(_xvals))`
+    const errCol = pyQ(panel.errorBarMode === 'sd' ? 'std' : 'sem')
+    if (kind === 'bar') {
+      return `${timeHead}
+_bw = 0.8 / max(1, len(_groups))
+for _gi, _gn in enumerate(_groups):
+    _sub = grouped[grouped[${pyQ(g.groupCol)}] == _gn].set_index(${pyQ(g.xCol)}).reindex(_xvals)
+    ${ax}.bar(_xpos + (_gi - (len(_groups) - 1) / 2) * _bw, _sub["mean"], _bw, yerr=_sub[${errCol}], capsize=3, label=str(_gn), color=colors[_gi % len(colors)], alpha=${Number(panel.barAlpha ?? 1)})
+${ax}.set_xticks(_xpos, [str(_v) for _v in _xvals], rotation=30, ha="right")
+${ax}.legend(frameon=False)`
+    }
+    const band = panel.confidenceBand
+      ? `\n    ${ax}.fill_between(_xpos, _sub["mean"] - _sub[${errCol}], _sub["mean"] + _sub[${errCol}], alpha=0.16, color=colors[_gi % len(colors)])`
+      : ''
+    return `${timeHead}
+for _gi, _gn in enumerate(_groups):
+    _sub = grouped[grouped[${pyQ(g.groupCol)}] == _gn].set_index(${pyQ(g.xCol)}).reindex(_xvals)
+    ${ax}.errorbar(_xpos, _sub["mean"], yerr=_sub[${errCol}], marker="o", markersize=3.8, markeredgewidth=0.45, capsize=2, elinewidth=0.8, linewidth=1.35, alpha=0.96, zorder=3, label=str(_gn), color=colors[_gi % len(colors)])${band}
+${ax}.set_xticks(_xpos, [str(_v) for _v in _xvals], rotation=30, ha="right")
+${ax}.legend(frameon=False)`
+  }
+  const head = `grouped = df.groupby(${pyQ(g.groupCol)}, sort=False)[${pyQ(g.measure)}].agg(mean="mean", std="std", count="count", sem="sem")
 xi = range(len(grouped))`
   if (kind === 'bar') {
     return `${head}
@@ -447,18 +479,18 @@ export function validateChartSpec(spec, input) {
   if (!spec?.figure || !Array.isArray(spec.panels) || spec.panels.length === 0) {
     throw new Error('INVALID_CHART_SPEC')
   }
-  const supported = new Set(['line', 'bar', 'scatter', 'heatmap', 'histogram', 'boxplot', 'dual_axis', 'surface3d', 'scatter3d', 'box_jitter', 'violin', 'dotplot', 'paired', 'stacked', 'forest'])
+  const supported = new Set(['line', 'bar', 'scatter', 'bubble', 'lollipop', 'heatmap', 'histogram', 'boxplot', 'dual_axis', 'surface3d', 'scatter3d', 'cone3d', 'line3d', 'filled_line3d', 'box_jitter', 'violin', 'dotplot', 'paired', 'stacked', 'forest'])
   const kinds = specKinds(spec)
   const unsupported = kinds.find((kind) => !supported.has(kind))
   if (unsupported) throw new Error(`UNSUPPORTED_CHART_KIND:${unsupported}`)
-  if (kinds.some((kind) => ['scatter', 'heatmap'].includes(kind)) && input.measures.length < 2) {
-    throw new Error('HEATMAP_REQUIRES_TWO_NUMERIC_MEASURES')
-  }
-  if (kinds.some((kind) => ['surface3d', 'scatter3d'].includes(kind)) && input.measures.length < 3) {
+  if (kinds.some((kind) => ['surface3d', 'scatter3d', 'cone3d', 'line3d', 'filled_line3d'].includes(kind)) && input.measures.length < 3) {
     throw new Error('SURFACE_REQUIRES_THREE_NUMERIC_MEASURES')
   }
   if (kinds.some((kind) => kind === 'dual_axis') && input.measures.length < 2) {
     throw new Error('DUAL_AXIS_REQUIRES_TWO_MEASURES')
+  }
+  if (kinds.some((kind) => kind === 'bubble') && input.measures.length < 2) {
+    throw new Error('BUBBLE_REQUIRES_TWO_NUMERIC_MEASURES')
   }
   if (kinds.some((kind) => ['paired', 'stacked'].includes(kind)) && input.measures.length < 2) {
     throw new Error('PAIRED_STACKED_REQUIRES_TWO_MEASURES')
@@ -471,7 +503,8 @@ function specPython(spec, c, outputBase) {
   const measures = pyList(c.measures)
   const colors = pyList(c.colors?.length ? c.colors : spec.panels.flatMap((panel) => panel.layers ?? []).map((layer) => layer.color).filter(Boolean))
   const f = spec.figure
-  const is3d = (kind) => kind === 'surface3d' || kind === 'scatter3d'
+  const is3d = (kind) => ['surface3d', 'scatter3d', 'cone3d', 'line3d', 'filled_line3d'].includes(kind)
+  const figureWidth = specKinds(spec).some(is3d) ? Math.max(8.4, cols * 5.4) : Math.max(6.4, cols * 4.4)
   const statements = specKinds(spec).map((kind, index) => {
     const ax = `axes.flat[${index}]`
     const panel = spec.panels[index]
@@ -489,17 +522,53 @@ ${ax}.set_xticks(range(len(df)), df[x_col].astype(str), rotation=30, ha="right")
       return `${ax}.scatter(df[measures[0]], df[measures[1]], alpha=0.8)
 ${ax}.set_xlabel(measures[0]); ${ax}.set_ylabel(measures[1])`
     }
+    if (kind === 'bubble') {
+      return `_bx = df[measures[0]].to_numpy(dtype=float)
+_by = df[measures[1]].to_numpy(dtype=float)
+_bs = df[measures[2]].to_numpy(dtype=float) if len(measures) > 2 else np.ones(len(df), dtype=float)
+_bm = np.isfinite(_bx) & np.isfinite(_by) & np.isfinite(_bs)
+if _bm.sum() < 3 or len(np.unique(_bx[_bm])) < 2 or len(np.unique(_by[_bm])) < 2: raise ValueError("气泡图需要至少 3 个完整观测且横纵坐标均有变化")
+_size = 90 + 520 * (_bs[_bm] - np.min(_bs[_bm])) / max(np.ptp(_bs[_bm]), 1e-9)
+_bubble = ${ax}.scatter(_bx[_bm], _by[_bm], s=_size, c=_by[_bm], cmap="plasma", alpha=0.78, edgecolors="white", linewidths=0.9)
+${ax}.set_xlabel(measures[0]); ${ax}.set_ylabel(measures[1])
+_cb = fig.colorbar(_bubble, ax=${ax}, fraction=0.046, pad=0.04)
+_cb.set_label(measures[1])`
+    }
+    if (kind === 'lollipop') {
+      const categoryCol = panel.categoryCol ? pyQ(panel.categoryCol) : null
+      return `_lp = df[[x_col, measures[0]${categoryCol ? `, ${categoryCol}` : ''}]].dropna().copy()
+_lp = _lp.sort_values(measures[0], ascending=True)
+_ly = np.arange(len(_lp))
+_lv = _lp[measures[0]].to_numpy(dtype=float)
+${ax}.hlines(_ly, 0, _lv, color="#B8C7D9", linewidth=2.2, zorder=1)
+${categoryCol ? `_cats = _lp[${categoryCol}].astype(str).to_numpy()
+_cat_names = list(dict.fromkeys(_cats.tolist()))
+_cat_colors = { _cat: colors[_ci % len(colors)] for _ci, _cat in enumerate(_cat_names) }
+_dot_colors = [_cat_colors[_cat] for _cat in _cats]` : `_dot_colors = [colors[0]] * len(_lp)`}
+${ax}.scatter(_lv, _ly, s=115, color=_dot_colors, edgecolors="white", linewidths=1.2, zorder=3)
+for _v, _y in zip(_lv, _ly):
+    ${ax}.text(_v, _y, f"  {_v:.2f}", va="center", ha="left", fontsize=10, color="#334155")
+${ax}.set_yticks(_ly, _lp[x_col].astype(str))
+${ax}.set_xlabel(measures[0])
+${ax}.spines["top"].set_visible(False); ${ax}.spines["right"].set_visible(False); ${ax}.spines["left"].set_visible(False)
+${categoryCol ? `for _cat, _color in _cat_colors.items(): ${ax}.scatter([], [], color=_color, s=70, label=_cat)
+${ax}.legend(frameon=False, loc="lower right")` : ''}`
+    }
     if (kind === 'heatmap') {
       // 科研规则 §10.5：相关性热力图默认蓝白红发散（白为 0）；矩阵较小（≤8 维）时标注数值
-      const cmap = pyQ(f.colormap ?? 'coolwarm')
+      const cmap = f.colormap === 'inspiration'
+        ? 'LinearSegmentedColormap.from_list("inspiration_corr", ["#3B4CC0", "#7FAED7", "#F7F4EA", "#E89A82", "#B40426"], N=256)'
+        : `plt.get_cmap(${pyQ(f.colormap ?? 'coolwarm')})`
       const annotate = c.measures.length <= 8
-      return `corr = df[measures].corr()
+      return `corr = df[measures].corr(min_periods=3)
+if not np.isfinite(corr.to_numpy(dtype=float)).any(): raise ValueError("热力图没有至少 3 个完整观测构成的相关系数")
 im = ${ax}.imshow(corr, vmin=-1, vmax=1, cmap=${cmap})
 ${ax}.set_xticks(range(len(measures)), measures, rotation=35, ha="right")
 ${ax}.set_yticks(range(len(measures)), measures)
+${ax}.set_aspect("equal")
 ${annotate ? `for _i in range(len(measures)):
     for _j in range(len(measures)):
-        ${ax}.text(_j, _i, f"{corr.iloc[_i, _j]:.2f}", ha="center", va="center", fontsize=${Number(f.annotationSize ?? 10.5)})` : ''}
+        ${ax}.text(_j, _i, f"{corr.iloc[_i, _j]:.2f}", ha="center", va="center", fontsize=${Number(f.annotationSize ?? 8.5)})` : ''}
 _cb = fig.colorbar(im, ax=${ax}, fraction=0.046, pad=0.04)
 _cb.set_label("相关系数")`
     }
@@ -509,15 +578,16 @@ _cb.set_label("相关系数")`
       // 箱线 + 抖动散点：科研论文展示原始分布 + 中位数/均值，分组形态按组绘制
       if (panel.groups) {
         const g = panel.groups
-        return `grouped = df.groupby(${pyQ(g.groupCol)})[${pyQ(g.measure)}].agg(mean="mean", std="std", count="count", sem="sem")
-grouped = grouped.sort_index()
+        return `grouped = df.groupby(${pyQ(g.groupCol)}, sort=False)[${pyQ(g.measure)}].agg(mean="mean", std="std", count="count", sem="sem")
 _gparts = [df.loc[df[${pyQ(g.groupCol)}] == _nm, ${pyQ(g.measure)}].dropna().to_numpy() for _nm in grouped.index]
-${ax}.boxplot(_gparts, tick_labels=grouped.index.astype(str), showmeans=True, patch_artist=True,
-             medianprops={"color": "#333333"}, boxprops={"facecolor": colors[0], "alpha": 0.32})
+_bp = ${ax}.boxplot(_gparts, tick_labels=grouped.index.astype(str), showmeans=True, patch_artist=True,
+             medianprops={"color": "#263238", "linewidth": 1.6}, boxprops={"facecolor": "white", "alpha": 0.82})
+for _vi, _box in enumerate(_bp["boxes"]):
+    _box.set_facecolor(colors[_vi % len(colors)])
 _jrng = np.random.default_rng(2026)
 for _bi, _vals in enumerate(_gparts):
-    ${ax}.scatter(np.full(len(_vals), _bi + 1) + _jrng.uniform(-0.13, 0.13, len(_vals)), _vals, s=8, alpha=0.55, color=colors[0], zorder=3)
-${ax}.set_xticks(range(len(grouped)), grouped.index.astype(str), rotation=30, ha="right")${significancePython(panel, ax)}`
+    ${ax}.scatter(np.full(len(_vals), _bi + 1) + _jrng.uniform(-0.13, 0.13, len(_vals)), _vals, s=22, alpha=0.68, color=colors[_bi % len(colors)], edgecolors="white", linewidths=0.45, zorder=3)
+${ax}.set_xticks(range(1, len(grouped) + 1), grouped.index.astype(str), rotation=30, ha="right")${significancePython(panel, ax)}`
       }
       return `_bparts = [df[m].dropna().to_numpy() for m in measures]
 ${ax}.boxplot(_bparts, tick_labels=measures, showmeans=True, patch_artist=True,
@@ -531,12 +601,13 @@ ${ax}.tick_params(axis="x", rotation=30)`
       // 小提琴：分布密度 + 中位数/均值标记；分组形态按组绘制
       if (panel.groups) {
         const g = panel.groups
-        return `grouped = df.groupby(${pyQ(g.groupCol)})[${pyQ(g.measure)}].agg(mean="mean", std="std", count="count", sem="sem")
-grouped = grouped.sort_index()
+        return `grouped = df.groupby(${pyQ(g.groupCol)}, sort=False)[${pyQ(g.measure)}].agg(mean="mean", std="std", count="count", sem="sem")
 _vparts = [df.loc[df[${pyQ(g.groupCol)}] == _nm, ${pyQ(g.measure)}].dropna().to_numpy() for _nm in grouped.index]
-_vp = ${ax}.violinplot(_vparts, positions=range(len(grouped)), showmeans=True, showextrema=False)
-for _vb in _vp["bodies"]:
-    _vb.set_facecolor(colors[0]); _vb.set_alpha(0.38); _vb.set_edgecolor("#333333")
+_vp = ${ax}.violinplot(_vparts, positions=range(len(grouped)), showmeans=True, showmedians=True, showextrema=True, bw_method=0.28)
+for _vi, _vb in enumerate(_vp["bodies"]):
+    _vb.set_facecolor(colors[_vi % len(colors)]); _vb.set_alpha(0.60); _vb.set_edgecolor("white"); _vb.set_linewidth(1.0)
+for _vi, _vals in enumerate(_vparts):
+    ${ax}.scatter(np.full(len(_vals), _vi) + np.random.default_rng(2026 + _vi).uniform(-0.08, 0.08, len(_vals)), _vals, s=14, color=colors[_vi % len(colors)], alpha=0.45, edgecolors="white", linewidths=0.3, zorder=3)
 ${ax}.set_xticks(range(len(grouped)), grouped.index.astype(str), rotation=30, ha="right")${significancePython(panel, ax)}`
       }
       return `_vparts = [df[m].dropna().to_numpy() for m in measures]
@@ -549,8 +620,7 @@ ${ax}.set_xticks(range(len(measures)), measures, rotation=30, ha="right")`
       // 误差棒点图（组/系列均值 ± 标准误）：Nature/PNAS 最高频样式
       if (panel.groups) {
         const g = panel.groups
-        return `grouped = df.groupby(${pyQ(g.groupCol)})[${pyQ(g.measure)}].agg(mean="mean", std="std", count="count", sem="sem")
-grouped = grouped.sort_index()
+        return `grouped = df.groupby(${pyQ(g.groupCol)}, sort=False)[${pyQ(g.measure)}].agg(mean="mean", std="std", count="count", sem="sem")
 ${ax}.errorbar(range(len(grouped)), grouped["mean"], yerr=grouped["sem"], fmt="o", capsize=3, markersize=6, color=colors[0])
 ${ax}.set_xticks(range(len(grouped)), grouped.index.astype(str), rotation=30, ha="right")${significancePython(panel, ax)}`
       }
@@ -606,33 +676,94 @@ ${ax}.invert_yaxis()`
     }
     if (kind === 'dual_axis') {
       // 双 Y 轴：左轴 measures[0]，右轴 measures[1]（twinx 自动独立量程，配色取前两色）
-      return `${ax}.plot(df[x_col], df[measures[0]], marker="o", linewidth=1.3, color=colors[0], label=measures[0])
+      return `_dual_df = df
+if _dual_df[x_col].duplicated().any():
+    _dual_df = _dual_df.groupby(x_col, as_index=False)[measures[:2]].mean()
+${ax}.plot(_dual_df[x_col], _dual_df[measures[0]], marker="o", linewidth=1.3, color=colors[0], label=measures[0])
+${ax}.fill_between(range(len(_dual_df)), _dual_df[measures[0]].to_numpy(dtype=float), 0, color=colors[0], alpha=0.10, zorder=0)
 ax2_${index} = ${ax}.twinx()
-ax2_${index}.plot(df[x_col], df[measures[1]], marker="s", linewidth=1.3, color=colors[1 % len(colors)], label=measures[1])
-${ax}.set_ylabel(measures[0]); ax2_${index}.set_ylabel(measures[1])
+ax2_${index}.plot(_dual_df[x_col], _dual_df[measures[1]], marker="s", linewidth=1.3, color=colors[1 % len(colors)], label=measures[1])
+${ax}.set_xlabel(x_col); ${ax}.set_ylabel(measures[0], color=colors[0]); ax2_${index}.set_ylabel(measures[1], color=colors[1 % len(colors)])
+${ax}.tick_params(axis="y", colors=colors[0]); ax2_${index}.tick_params(axis="y", colors=colors[1 % len(colors)])
+${ax}.set_xticks(range(len(_dual_df)), _dual_df[x_col].astype(str), rotation=30, ha="right")
 _h1_${index}, _l1_${index} = ${ax}.get_legend_handles_labels()
 _h2_${index}, _l2_${index} = ax2_${index}.get_legend_handles_labels()
 ${ax}.legend(_h1_${index} + _h2_${index}, _l1_${index} + _l2_${index}, frameon=False, loc="upper left")`
     }
-    if (kind === 'surface3d' || kind === 'scatter3d') {
+    if (['surface3d', 'scatter3d', 'cone3d', 'line3d', 'filled_line3d'].includes(kind)) {
       // 三维图：删除占位 2D 轴并新建 3D 轴（单面板使用，循环按 ax3d_<index> 引用）
       const ax3d = `ax3d_${index}`
+      const cmap3d = f.colormap === 'inspiration'
+        ? 'LinearSegmentedColormap.from_list("inspiration_surface", ["#243B53", "#2A9D8F", "#E9C46A", "#E76F51"])'
+        : `plt.get_cmap(${pyQ(f.colormap ?? 'viridis')})`
+      const fillCode = kind === 'filled_line3d'
+        ? `_base = float(np.nanmin(_z3[_m3]))
+    for _xx, _zz in zip(_xs, _zs):
+        ${ax3d}.plot([_xx, _xx], [_yv, _yv], [_base, _zz], color=_cmap3(_ri / max(1, len(_ys) - 1)), alpha=0.16, linewidth=3.0)`
+        : ''
       return `from mpl_toolkits.mplot3d import Axes3D  # noqa: F401
 fig.delaxes(${ax})
 ${ax3d} = fig.add_subplot(${rows}, ${cols}, ${index + 1}, projection="3d")
 ${kind === 'surface3d'
     ? `_x3, _y3, _z3 = (df[measures[0]].to_numpy(dtype=float), df[measures[1]].to_numpy(dtype=float), df[measures[2]].to_numpy(dtype=float))
 _m3 = np.isfinite(_x3) & np.isfinite(_y3) & np.isfinite(_z3)
-if not _m3.any(): raise ValueError('3D 曲面无完整 XYZ 观测')
-_surf = ${ax3d}.plot_trisurf(_x3[_m3], _y3[_m3], _z3[_m3], cmap=plt.get_cmap(${pyQ(f.colormap ?? 'viridis')}), linewidth=0.25, edgecolor='#ffffff', antialiased=True, alpha=0.94)
-fig.colorbar(_surf, ax=${ax3d}, shrink=0.72, pad=0.12, label=measures[2])`
-    : `_x3, _y3, _z3 = (df[measures[0]].to_numpy(dtype=float), df[measures[1]].to_numpy(dtype=float), df[measures[2]].to_numpy(dtype=float))
+if _m3.sum() < 8 or len(np.unique(_x3[_m3])) < 2 or len(np.unique(_y3[_m3])) < 2 or np.linalg.matrix_rank(np.column_stack((_x3[_m3], _y3[_m3]))) < 2: raise ValueError('3D 曲面需要至少 8 个完整且非共线的 XY 观测')
+${f.secondaryProcessing === 'interpolate'
+  ? `_xu, _yu = np.unique(_x3[_m3]), np.unique(_y3[_m3])
+_zgrid = np.full((len(_yu), len(_xu)), np.nan)
+for _xx, _yy, _zz in zip(_x3[_m3], _y3[_m3], _z3[_m3]):
+    _zgrid[np.where(_yu == _yy)[0][0], np.where(_xu == _xx)[0][0]] = _zz
+if np.isnan(_zgrid).any():
+    print('WARNING 3D_INTERPOLATION_FALLBACK: XY 网格不完整，使用原始三角曲面')
+    _surf = ${ax3d}.plot_trisurf(_x3[_m3], _y3[_m3], _z3[_m3], cmap=${cmap3d}, linewidth=0.18, edgecolor='#ffffff', antialiased=True, alpha=0.94)
+else:
+    _gx = np.linspace(float(_xu.min()), float(_xu.max()), 45)
+    _gy = np.linspace(float(_yu.min()), float(_yu.max()), 45)
+    _row_interp = np.vstack([np.interp(_gx, _xu, _row) for _row in _zgrid])
+    _GZ = np.vstack([np.interp(_gy, _yu, _row_interp[:, _j]) for _j in range(len(_gx))]).T
+    _GX, _GY = np.meshgrid(_gx, _gy)
+    _surf = ${ax3d}.plot_surface(_GX, _GY, _GZ, cmap=${cmap3d}, linewidth=0, antialiased=True, alpha=0.94, rcount=45, ccount=45)`
+  : `_surf = ${ax3d}.plot_trisurf(_x3[_m3], _y3[_m3], _z3[_m3], cmap=${cmap3d}, linewidth=0.18, edgecolor='#ffffff', antialiased=True, alpha=0.94)`}
+fig.colorbar(_surf, ax=${ax3d}, shrink=0.58, pad=0.22, label=measures[2])`
+    : kind === 'scatter3d'
+      ? `_x3, _y3, _z3 = (df[measures[0]].to_numpy(dtype=float), df[measures[1]].to_numpy(dtype=float), df[measures[2]].to_numpy(dtype=float))
 _m3 = np.isfinite(_x3) & np.isfinite(_y3) & np.isfinite(_z3)
-if not _m3.any(): raise ValueError('3D 图没有完整的有限 XYZ 观测，停止输出以避免伪图')
-${ax3d}.scatter(_x3[_m3], _y3[_m3], _z3[_m3], c=_z3[_m3], cmap=plt.get_cmap(${pyQ(f.colormap ?? 'viridis')}), alpha=0.88, s=34, edgecolors='white', linewidths=0.35)
-fig.colorbar(${ax3d}.collections[-1], ax=${ax3d}, shrink=0.72, pad=0.12, label=measures[2])`}
-${ax3d}.set_xlabel(measures[0]); ${ax3d}.set_ylabel(measures[1]); ${ax3d}.set_zlabel(measures[2])
-${ax3d}.set_box_aspect((1.0, 1.0, 0.78)); ${ax3d}.view_init(elev=25, azim=-55); ${ax3d}.grid(True, alpha=0.22)
+if _m3.sum() < 4 or any(len(np.unique(_v)) < 2 for _v in (_x3[_m3], _y3[_m3], _z3[_m3])): raise ValueError('三维散点需要至少 4 个完整观测且三轴均有变化，停止输出以避免伪图')
+${ax3d}.scatter(_x3[_m3], _y3[_m3], _z3[_m3], c=_z3[_m3], cmap=${cmap3d}, alpha=0.88, s=34, edgecolors='white', linewidths=0.35)
+fig.colorbar(${ax3d}.collections[-1], ax=${ax3d}, shrink=0.72, pad=0.12, label=measures[2])`
+      : kind === 'cone3d'
+      ? `_x3, _y3, _z3 = (df[measures[0]].to_numpy(dtype=float), df[measures[1]].to_numpy(dtype=float), df[measures[2]].to_numpy(dtype=float))
+_m3 = np.isfinite(_x3) & np.isfinite(_y3) & np.isfinite(_z3)
+if _m3.sum() < 4 or any(len(np.unique(_v)) < 2 for _v in (_x3[_m3], _y3[_m3], _z3[_m3])): raise ValueError('三维锥状图需要至少 4 个完整观测且三轴均有变化')
+_zmin, _zmax = float(np.min(_z3[_m3])), float(np.max(_z3[_m3]))
+_span = max(_zmax - _zmin, 1e-9)
+_norm3 = plt.Normalize(_zmin, _zmax)
+_theta = np.linspace(0, 2 * np.pi, 28)
+for _xx, _yy, _zz in zip(_x3[_m3], _y3[_m3], _z3[_m3]):
+    _radius = max(float(np.ptp(_x3[_m3])) * 0.035, float(np.ptp(_y3[_m3])) * 0.035, _span * 0.018, 0.05)
+    _tt = np.linspace(0, 1, 16)[:, None]
+    _X = _xx + _radius * (1 - _tt) * np.cos(_theta)[None, :]
+    _Y = _yy + _radius * (1 - _tt) * np.sin(_theta)[None, :]
+    _Z = _zmin + _tt * (_zz - _zmin)
+    ${ax3d}.plot_surface(_X, _Y, _Z, color=${cmap3d}(_norm3(_zz)), alpha=0.78, linewidth=0, antialiased=True)
+    ${ax3d}.scatter([_xx], [_yy], [_zz], c=[${cmap3d}(_norm3(_zz))], s=18, edgecolors='white', linewidths=0.3)
+${ax3d}.plot([], [], [], color='#6E8FB2', linewidth=7, alpha=0.7, label='样本锥体')
+${ax3d}.legend(frameon=False, loc='upper left')
+sm3 = plt.cm.ScalarMappable(norm=_norm3, cmap=${cmap3d}); sm3.set_array(_z3[_m3])
+fig.colorbar(sm3, ax=${ax3d}, shrink=0.64, pad=0.24, label='信号强度')`
+      : `_x3, _y3, _z3 = (df[measures[0]].to_numpy(dtype=float), df[measures[1]].to_numpy(dtype=float), df[measures[2]].to_numpy(dtype=float))
+_m3 = np.isfinite(_x3) & np.isfinite(_y3) & np.isfinite(_z3)
+if _m3.sum() < 4: raise ValueError('三维折线需要至少 4 个完整观测')
+_ys = np.unique(_y3[_m3])
+_cmap3 = plt.get_cmap('viridis')
+for _ri, _yv in enumerate(_ys):
+    _rm = _m3 & (_y3 == _yv)
+    _ord = np.argsort(_x3[_rm])
+    _xs, _zs = _x3[_rm][_ord], _z3[_rm][_ord]
+    ${ax3d}.plot(_xs, np.full(len(_xs), _yv), _zs, color=_cmap3(_ri / max(1, len(_ys) - 1)), linewidth=2.2, marker='o', markersize=3.5, alpha=0.95)
+    ${fillCode}`}
+${ax3d}.set_xlabel(measures[0], labelpad=10); ${ax3d}.set_ylabel(measures[1], labelpad=10); ${ax3d}.set_zlabel(measures[2], labelpad=24)
+${ax3d}.set_box_aspect((1.0, 1.0, 0.82)); ${ax3d}.view_init(elev=28, azim=-58); ${ax3d}.grid(True, alpha=0.18)
 for _axis, _values in zip(('x', 'y', 'z'), (_x3[_m3], _y3[_m3], _z3[_m3])):
     _lo, _hi = float(np.min(_values)), float(np.max(_values))
     _pad = max((_hi - _lo) * 0.06, abs(_lo) * 0.01, 1e-9)
@@ -652,8 +783,9 @@ ${ax}.legend(frameon=False, fontsize=${Number(f.legendSize ?? 11)})`)
     const title = titles[index]
     const lines = [`ax = ${axesExpr[index]}`]
     if (['bar', 'line'].includes(specKinds(spec)[index])) {
-      lines.push(`ax.set_xlabel(${pyQ(spec.panels[index].scales?.find(s => s.axis === 'x')?.label ?? c.xLabel ?? c.x)})`)
+      lines.push(`ax.set_xlabel(${pyQ(spec.panels[index].scales?.find(s => s.axis === 'x')?.label ?? c.xLabel ?? c.x)}, labelpad=8)`)
       lines.push(`ax.set_ylabel(${pyQ(spec.panels[index].scales?.find(s => s.axis === 'y')?.label ?? c.yLabel)})`)
+      lines.push('ax.tick_params(axis="x", pad=5)')
     }
     if (title) {
       lines.push(`ax.set_title(_fit_title(${pyQ(title)}), color=${pyQ(f.titleColor ?? '#000000')}, fontsize=${Number(f.titleFontSize ?? 15)}, pad=14)`)
@@ -684,6 +816,7 @@ ${ax}.legend(frameon=False, fontsize=${Number(f.legendSize ?? 11)})`)
   return `# ChartSpec-driven Python / Matplotlib
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib.colors import LinearSegmentedColormap
 ${PY_PREAMBLE}
 df = pd.read_csv(${pyQ(c.fileName)})
 x_col = ${pyQ(c.x)}
@@ -692,13 +825,16 @@ colors = ${colors}
 plt.rcParams.update({
     ${rcLines}
 })
-fig, axes = plt.subplots(${rows}, ${cols}, squeeze=False, figsize=(${Math.max(6.4, cols * 4.4)}, ${Math.max(4, rows * 3.6)}), dpi=${c.dpi ?? 160}, layout="constrained")
+fig, axes = plt.subplots(${rows}, ${cols}, squeeze=False, figsize=(${figureWidth}, ${Math.max(4.8, rows * 3.8)}), dpi=${c.dpi ?? 160}, layout="constrained")
 ${statements}
 panel_titles = ${pyList(titles)}
 ${loopBody}
 for _i in range(len(panel_titles), len(axes.flat)):
     axes.flat[_i].set_visible(False)
-fig.suptitle(_fit_title(${pyQ(spec.figure.title ?? c.title)}), color=${pyQ(f.titleColor ?? '#000000')}, fontsize=${Number(f.titleFontSize ?? 15)}, fontweight=${f.titleFontWeight === 'normal' ? '"normal"' : '"bold"'})
+fig.suptitle(_fit_title(${pyQ(spec.figure.title ?? c.title)}), y=0.98, color=${pyQ(f.titleColor ?? '#000000')}, fontsize=${Number(f.titleFontSize ?? 15)}, fontweight=${f.titleFontWeight === 'normal' ? '"normal"' : '"bold"'})
+fig.set_constrained_layout(False)
+fig.subplots_adjust(top=0.86, bottom=0.30, left=0.10, right=0.90, wspace=0.28, hspace=0.32)
+${''} # 图注由结果分析区展示，不叠加到图内
 fig.savefig(${pyQ(`${outputBase}.png`)}, dpi=${c.dpi ?? 160}, facecolor="white")
 fig.savefig(${pyQ(`${outputBase}.svg`)}, facecolor="white")
 ${outputBase === 'plan_convention' ? `fig.savefig(${pyQ(`${outputBase}.pdf`)}, facecolor="white")` : ''}
@@ -731,7 +867,7 @@ for (mi in seq_along(measures)) {
       return `corr <- cor(df[measures], use = "pairwise.complete.obs")
 heatmap(corr, Rowv = NA, Colv = NA, scale = "none",
         col = colorRampPalette(c("#6E8FB2", "#FFFFFF", "#C16E71"))(128),
-        main = "Correlation Matrix")`
+        main = "Correlation Matrix", xlab = ${rQ(c.xLabel ?? c.x)})`
     }
     if (kind === 'histogram') return `hist(df[[measures[1]]], breaks = "FD", xlab = measures[1], main = "Distribution")`
     if (kind === 'boxplot') return `boxplot(df[measures], las = 2, outline = TRUE)`
@@ -850,6 +986,17 @@ print(p)`
   pairs(df[measures])
 }`
     }
+    if (kind === 'line3d' || kind === 'filled_line3d') {
+      return `if (requireNamespace("scatterplot3d", quietly = TRUE)) {
+  d3 <- df[order(df[[measures[1]]], df[[measures[2]]]), ]
+  s3 <- scatterplot3d::scatterplot3d(d3[[measures[1]]], d3[[measures[2]]], d3[[measures[3]]],
+    type = "l", lwd = 2, pch = 19, color = "#2A9D8F",
+    xlab = measures[1], ylab = measures[2], zlab = measures[3])
+} else {
+  warning("scatterplot3d 缺失：三维折线降级为二维序列")
+  plot(df[[measures[1]]], df[[measures[3]]], type = "l", xlab = measures[1], ylab = measures[3])
+}`
+    }
     return (panel.groups
       ? groupedR(panel, 'line')
       : `matplot(df[[x_col]], df[measures], type = "o", pch = 1, lty = 1, xlab = ${rQ(panel.scales?.find(scale => scale.axis === 'x')?.label ?? c.xLabel ?? c.x)}, ylab = ${rQ(panel.scales?.find(scale => scale.axis === 'y')?.label ?? c.yLabel)})`)
@@ -917,7 +1064,8 @@ function specMatlab(spec, c, outputBase) {
 C = corr(table2array(T(:, measures)), 'Rows', 'pairwise');
 imagesc(C, [-1 1]);
 colormap(gca, interp1(linspace(0,1,3), [0.431 0.561 0.698; 1 1 1; 0.757 0.431 0.443], linspace(0,1,128)));
-cb = colorbar; cb.Label.String = '相关系数'; axis square;
+cb = colorbar; cb.Label.String = '相关系数'; cb.Location = 'eastoutside'; % 'Location', 'eastoutside'
+axis square;
 xticks(1:numel(measures)); yticks(1:numel(measures));
 xticklabels(measures); yticklabels(measures);`
     }
@@ -1042,6 +1190,11 @@ colormap(gca, 'parula'); colorbar; axis tight; daspect([1 1 0.8]); view(35, 25);
       return `nexttile; scatter3(T.(measures{1}), T.(measures{2}), T.(measures{3}), 40, T.(measures{3}), 'filled', 'MarkerEdgeColor', [1 1 1]);
 xlabel(measures{1}); ylabel(measures{2}); zlabel(measures{3});
 colormap(gca, 'parula'); colorbar; axis tight; daspect([1 1 0.8]); view(35, 25); grid on;`
+    }
+    if (kind === 'line3d' || kind === 'filled_line3d') {
+      return `nexttile; hold on; [~, ord] = sortrows([T.(measures{2}), T.(measures{1})]);
+plot3(T.(measures{1})(ord), T.(measures{2})(ord), T.(measures{3})(ord), '-o', 'LineWidth', 1.6, 'MarkerSize', 3, 'Color', [0.16 0.62 0.56]);
+xlabel(measures{1}); ylabel(measures{2}); zlabel(measures{3}); axis tight; daspect([1 1 0.8]); view(35, 25); grid on; hold off;`
     }
     return (panel.groups
       ? groupedMatlab(panel, 'line')

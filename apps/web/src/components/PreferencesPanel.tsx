@@ -24,7 +24,7 @@ function timeOf(t: number) {
 }
 
 export function PreferencesPanel() {
-  const { state, clearPrefs, setPreferencePaused, revertPreference, loadColorProfile, resetColorPreferences } = useStore()
+  const { state, clearPrefs, setPreferencePaused, revertPreference, loadColorProfile, resetColorPreferences, recordStylePreference } = useStore()
   const prefs = state.globalPreferences.length ? state.globalPreferences : (state.task?.preferences ?? [])
   const paused = state.preferencePaused
   const profile = state.colorProfile
@@ -41,6 +41,15 @@ export function PreferencesPanel() {
         <span className={`switch__track ${paused ? 'on' : ''}`} onClick={() => setPreferencePaused(!paused)} />
       </div>
       {paused && <div className="badge badge--warn">已暂停：本轮操作不再写入偏好</div>}
+
+      <div style={{ border: '1px solid var(--glass-border)', borderRadius: 'var(--radius)', background: 'var(--glass-bg)', padding: 10 }}>
+        <div style={{ fontSize: 12, fontWeight: 650, color: 'var(--ink-700)', marginBottom: 6 }}>记录明确偏好（形成可审计学习成果）</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          <Button size="sm" variant="ghost" onClick={() => void recordStylePreference({ palette: '低饱和蓝色', legend: '图例置于图外右侧', font: '中文无衬线', background: '白底' })}>低饱和蓝色 + 右侧图例</Button>
+          <Button size="sm" variant="ghost" onClick={() => void recordStylePreference({ palette: '高对比配色', legend: '图内顶部', font: '中文无衬线', background: '白底' })}>高对比 + 顶部图例</Button>
+        </div>
+        <div style={{ fontSize: 10.5, color: 'var(--ink-400)', marginTop: 5 }}>点击后会写入偏好事件，并在下方显示事件编号、摘要、置信度与时间。</div>
+      </div>
 
       {/* v0.4.0 优化：配色学习画像区块（撤销/重置闭环）——展示学习摘要与一键重置，可解释“为什么推荐这个色板” */}
       <div style={{ border: '1px solid var(--glass-border)', borderRadius: 'var(--radius)', background: 'var(--glass-bg)', padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>

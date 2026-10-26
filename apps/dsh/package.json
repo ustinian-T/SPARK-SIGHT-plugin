@@ -1,6 +1,6 @@
 {
   "name": "sparksight-dsh",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "SPARK SIGHT for DeepSeek Harness: research plotting inside the agent harness",
   "type": "module",
   "main": "./index.js",
@@ -17,6 +17,7 @@
     "cordis.patch.yml",
     "locale/*.json",
     "icon.svg",
+    "docs/**",
     "THIRD_PARTY_NOTICES.md",
     "resources/**",
     "LICENSE"
@@ -34,7 +35,10 @@
       "platform": "web",
       "immediately": true,
       "inject": [
-        "@deepseek-ai/dsh-client-ui-conversation"
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-client-ui-session"
       ]
     }
   },
@@ -42,9 +46,28 @@
     "@deepseek-ai/cordis": ">=4",
     "react": ">=18"
   },
+  "author": "ustinian-T",
   "license": "MIT",
+  "homepage": "https://www.example.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ustinian-T/deep_imaging.git",
+    "directory": "apps/dsh"
+  },
+  "bugs": {
+    "url": "https://github.com/ustinian-T/deep_imaging/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "engines": {
+    "node": ">=20"
+  },
   "keywords": [
     "dsh-plugin",
+    "deepseek-harness",
+    "dsh",
     "sparksight",
     "research-plotting",
     "charts",

@@ -5,6 +5,7 @@ import { buildPlans } from '../src/plans.js'
 import { ingestFile } from '../src/csv.js'
 import { runDeterministicAnalysis } from '../src/stats.js'
 import { runInSandbox } from '../src/sandbox.js'
+import { TaskStore } from '../src/taskStore.js'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -69,4 +70,22 @@ test('minimal clarification asks the analysis goal and reuses confirmed display 
   assert.equal(result.goal, 'distribution')
   assert.equal(result.labelLanguage, 'bilingual')
   assert.equal(result.legendPosition, 'top')
+})
+
+test('demo data nature is explicit, bounded, and preserved in task snapshots', () => {
+  const store = new TaskStore({ ttlMs: 0 })
+  const task = store.create({
+    title: '虚拟科研绘图演示',
+    engine: 'python',
+    prompt: '展示六周趋势',
+    fileName: '01_实验观测数据.csv',
+    bytes: Buffer.from('时间,实验组别,响应指标\n第1周,对照组,10\n', 'utf-8'),
+    dataNature: 'synthetic_demo',
+    dataDisclosure: '构造数据，仅用于功能演示，不代表真实科研结论'
+  })
+  const snapshot = store.snapshot(task)
+  assert.equal(snapshot.dataNature, 'synthetic_demo')
+  assert.match(snapshot.dataDisclosure, /不代表真实科研结论/)
+  const invalid = store.create({ title: 'unknown', engine: 'python', prompt: '', fileName: 'x.csv', bytes: Buffer.from('x\n1\n'), dataNature: 'not_allowed' })
+  assert.equal(store.snapshot(invalid).dataNature, 'unknown')
 })

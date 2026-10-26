@@ -2,17 +2,16 @@
 import { useEffect, useState } from 'react'
 import { navigate } from './router'
 
-// 公开源码仓库不含真实备案号与权利人姓名：部署方必须替换成自己依法取得的备案信息。
 export const ICP_NUMBER = 'ICP备-示例-0000000号'
 export const ICP_URL = 'https://beian.miit.gov.cn/'
 export const GONGWANG_NUMBER = '公网安备-示例-00000000000号'
 export const GONGWANG_URL = 'https://beian.mps.gov.cn/'
-export const COPYRIGHT = '© 2026 SPARK SIGHT contributors'
+export const COPYRIGHT = '© 2026 redacted'
 
 export function BrandMark({ compact = false }: { compact?: boolean }) {
   return (
-    <a className="sd-brand" href="#/" onClick={(e) => { e.preventDefault(); if (window.__SPARK_VSCODE__) void window.__SPARK_VSCODE__.openWebsite(); else navigate('/') }}>
-      <img src="./logo-dark.png" alt="灵感视界 SPARK SIGHT" />
+    <a className="sd-brand" href="#/" onClick={(e) => { e.preventDefault(); navigate('/') }}>
+      <img src="/logo-dark.png" alt="灵感视界 SPARK SIGHT" />
       <span>
         <span className="sd-brand__cn">灵感视界</span>
         {!compact && <small>SPARK SIGHT</small>}

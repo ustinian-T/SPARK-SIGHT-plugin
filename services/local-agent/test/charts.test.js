@@ -116,7 +116,7 @@ test('Python 生成代码启用约束布局并让布局引擎自动预留总标�
   assert.match(code, /layout="constrained"/)
   assert.match(code, /fig\.suptitle\([\s\S]*fontweight=[^)]*\)/)
   assert.doesNotMatch(code, /suptitle\([\s\S]*y=1\.03\)/)
-  assert.match(code, /facecolor="white"\)/)
+  assert.match(code, /facecolor="white"(?:,|\))/)
   // v0.4.3：不再使用 bbox_inches="tight"（与 constrained 混用会把标题压贴边、与刻度重叠）；白底导出保留
   assert.doesNotMatch(code, /bbox_inches="tight"/)
   assert.doesNotMatch(code, /fig\.tight_layout\(\)/)

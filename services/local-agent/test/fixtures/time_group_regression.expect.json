@@ -1,0 +1,19 @@
+{
+  "dataset": "time_group_regression.csv",
+  "roles": {
+    "id": ["样本编号"],
+    "xTime": ["时间"],
+    "group": ["实验组别"],
+    "replicate": ["重复编号"],
+    "measure": ["响应指标", "表达水平", "温度/℃", "成本/元"]
+  },
+  "plot": {
+    "xField": "时间",
+    "groupField": "实验组别",
+    "measureField": "响应指标",
+    "aggregation": "time × group mean + SE",
+    "expectedTimePoints": 2,
+    "forbiddenDefaultXAxis": "样本编号"
+  },
+  "guards": ["identifier_exclusion", "mixed_unit_single_axis", "p_underflow_formatting"]
+}

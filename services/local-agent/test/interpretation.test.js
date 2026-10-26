@@ -62,3 +62,10 @@ test('解读段落始终存在且以标题开头；无任何证据时给出兜�
   assert.equal(interp.insights.length, 0)
   assert.ok(interp.captionSuggestion.includes('图1-1'))
 })
+
+test('不适用图型给出动态替代方案并要求确认', () => {
+  const analysis = analyze('x,y\n1,3\n2,4\n3,5\n')
+  const interp = buildInterpretation({ summary: analysis.summary, evidence: analysis.evidence, claims: analysis.claims, chartType: '三维曲面图', title: '三维测试' })
+  assert.equal(interp.recommendation.status, 'needs_confirmation')
+  assert.ok(interp.recommendation.alternatives.includes('二维散点图'))
+})

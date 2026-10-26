@@ -1,8 +1,6 @@
 import { createHash } from 'node:crypto'
 import { request } from 'node:https'
 export const ARTIFACT_NAME = 'Spark-Sight-DSH.tgz'
-// 发布源：上游构建指向官方服务；公开源码以占位符发布，避免暴露私有基础设施。
-// 自行发布插件包的构建请通过 DEEP_IMAGING_UPDATE_ORIGIN 指向自己的 HTTPS 发布主机。
 const ORIGIN = `${process.env.DEEP_IMAGING_UPDATE_ORIGIN || 'https://updates.example.com'}/downloads/`
 const parts = (value) => {
   if (typeof value !== 'string' || !/^\d+\.\d+\.\d+$/.test(value)) throw new Error('发布版本格式无效')

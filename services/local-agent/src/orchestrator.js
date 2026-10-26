@@ -7,9 +7,10 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { runDeterministicAnalysis, buildDataOverview } from './stats.js'
-import { buildPlans } from './plans.js'
+import { buildSemanticModel } from './semanticModel.js'
+import { buildPlans, normalizeRequestedChartType } from './plans.js'
 import { applyPreference, preferenceSummary, PreferenceStore } from './preferences.js'
-import { parseIntent } from './intent.js'
+import { parseIntent, validateFieldSlots } from './intent.js'
 import { parseIntentWithLlm } from './llm.js'
 import { runClarification, recommendPresentationPalettes, defaultClarification } from './clarify.js'
 import { normalizeUserProfile, profileClarificationDefaults } from './userProfile.js'
@@ -116,7 +117,7 @@ export class Orchestrator {
     this.emit(task, { type: 'state_delta', state: 'ITERATE' })
     try {
       const csv = await this.#csvText(task)
-      const analysis = runDeterministicAnalysis({ profile: task.dataset, text: csv.text, rawDelimiter: csv.rawDelimiter, fileName: task.fileName })
+      const analysis = runDeterministicAnalysis({ profile: task.dataset, text: csv.text, rawDelimiter: csv.rawDelimiter, fileName: task.fileName, semanticModel: task.semanticModel })
       const revision = await applySpecPatch(task, token, async (plan) => {
         const input = {
           fileName: task.fileName,
@@ -134,7 +135,7 @@ export class Orchestrator {
         if (out.result.status !== 'success' || !verification.passed) {
           throw new ApiError(422, ERR.SANDBOX_EXECUTION_FAILED, '补丁后的规格未通过真实执行与独立验证')
         }
-        plan.verification = { passed: true, checks: verification.checks, quality: verification.quality, artifactHash: verification.artifactHash, codeHash: sha256(plan.code?.[out.engine] ?? ''), dataFingerprint: task.dataset?.fingerprint ?? null, revision: task.currentRevision ?? 0, engine: out.engine, attempts: out.attempts }
+        plan.verification = { passed: true, checks: verification.checks, quality: verification.quality, layers: verification.layers, artifactHash: verification.artifactHash, codeHash: sha256(plan.code?.[out.engine] ?? ''), dataFingerprint: task.dataset?.fingerprint ?? null, revision: task.currentRevision ?? 0, engine: out.engine, attempts: out.attempts }
         plan.executionStatus = 'verified'
         this.#attachArtifacts(task, plan, out, verification)
         return plan
@@ -169,7 +170,7 @@ export class Orchestrator {
     this.emit(task, { type: 'state_delta', state: 'ITERATE' })
     try {
       const csv = await this.#csvText(task)
-      const analysis = runDeterministicAnalysis({ profile: task.dataset, text: csv.text, rawDelimiter: csv.rawDelimiter, fileName: task.fileName })
+      const analysis = runDeterministicAnalysis({ profile: task.dataset, text: csv.text, rawDelimiter: csv.rawDelimiter, fileName: task.fileName, semanticModel: task.semanticModel })
       const revision = await applySourceRevision(task, token, async (plan, payload) => {
         const input = {
           fileName: task.fileName,
@@ -205,7 +206,7 @@ export class Orchestrator {
             status: result.status, missingArtifacts: result.missingArtifacts, safetyViolations: result.safetyViolations
           })
         }
-        plan.verification = { passed: true, checks: verification.checks, quality: verification.quality, artifactHash: verification.artifactHash, codeHash: sha256(plan.code?.[payload.engine] ?? ''), dataFingerprint: task.dataset?.fingerprint ?? null, revision: task.currentRevision ?? 0, engine: payload.engine, attempts: 1 }
+        plan.verification = { passed: true, checks: verification.checks, quality: verification.quality, layers: verification.layers, artifactHash: verification.artifactHash, codeHash: sha256(plan.code?.[payload.engine] ?? ''), dataFingerprint: task.dataset?.fingerprint ?? null, revision: task.currentRevision ?? 0, engine: payload.engine, attempts: 1 }
         plan.executionStatus = 'verified'
         this.#attachArtifacts(task, plan, { result, engine: payload.engine, attempts: 1 }, verification)
         return plan
@@ -248,7 +249,7 @@ export class Orchestrator {
     }]
     this.storage?.replaceDataset?.(task.taskId, { fileName: task.fileName }, task.bytes)
     this.emit(task, { type: 'dataset_revised', dataset: task.dataset, dataVersions: task.dataVersions, markOldData: true })
-    this.prepareFeedback(task, { feedback: `数据修订：${payload.kind}`, kind: 'data_revision' })
+          this.prepareFeedback(task, { feedback: `数据修订：${payload.kind}`, kind: 'data_revision' })
     await this.replan(task, { feedback: `数据修订：${payload.kind}`, kind: 'data_revision', reason: 'data' })
     return { dataVersion: task.dataVersions.at(-1), state: task.state }
   }
@@ -266,7 +267,7 @@ export class Orchestrator {
     this.emit(task, { type: 'state_delta', state: 'ITERATE' })
     try {
       const csv = await this.#csvText(task)
-      const analysis = runDeterministicAnalysis({ profile: task.dataset, text: csv.text, rawDelimiter: csv.rawDelimiter, fileName: task.fileName })
+      const analysis = runDeterministicAnalysis({ profile: task.dataset, text: csv.text, rawDelimiter: csv.rawDelimiter, fileName: task.fileName, semanticModel: task.semanticModel })
       const plan = plans[index]
       const input = { fileName: task.fileName, x: analysis.summary.xLabel, measures: analysis.summary.series.map((series) => series.label), title: plan.spec.figure.title, yLabel: plan.spec.panels[0]?.yLabel ?? '测量值', outputBase: plan.plan_id }
       plan.code = generateCodeForSpec(plan.spec, input)
@@ -274,7 +275,7 @@ export class Orchestrator {
       const out = await this.#executeOneWithRepair(task, plan, await this.capabilities(), input)
       const verification = verifyPlan(plan, out.result, { evidence: task.evidence, text: csv.text, rawDelimiter: csv.rawDelimiter })
       if (out.result.status !== 'success' || !verification.passed) throw new ApiError(422, ERR.SANDBOX_EXECUTION_FAILED, '样式预设未通过真实执行与验证')
-      plan.verification = { passed: true, checks: verification.checks, quality: verification.quality, artifactHash: verification.artifactHash, codeHash: sha256(plan.code?.[out.engine] ?? ''), dataFingerprint: task.dataset?.fingerprint ?? null, revision: task.currentRevision ?? 0, engine: out.engine, attempts: out.attempts }
+      plan.verification = { passed: true, checks: verification.checks, quality: verification.quality, layers: verification.layers, artifactHash: verification.artifactHash, codeHash: sha256(plan.code?.[out.engine] ?? ''), dataFingerprint: task.dataset?.fingerprint ?? null, revision: task.currentRevision ?? 0, engine: out.engine, attempts: out.attempts }
       plan.executionStatus = 'verified'
       this.#attachArtifacts(task, plan, out, verification)
       const version = Math.max(0, ...task.planVersions.map((item) => item.version)) + 1
@@ -494,13 +495,13 @@ export class Orchestrator {
   }
 
   /** 偏好反馈后重规划（REPLAN）：保留数据与证据，重新生成方案并真实执行 */
-  async replan(task, { feedback = '', kind = 'manual_edit', planId, reason = 'feedback' } = {}) {
+  async replan(task, { feedback = '', kind = 'manual_edit', planId, reason = 'feedback', requestedChartType } = {}) {
     try {
       this.#alive(task)
       const profile = task.dataset
       // 从原始字节重放确定性统计（结果与首次一致；证据账本不重复追加）
       const csv = await this.#csvText(task)
-      const analysis = runDeterministicAnalysis({ profile, text: csv.text, rawDelimiter: csv.rawDelimiter, fileName: task.fileName })
+      const analysis = runDeterministicAnalysis({ profile, text: csv.text, rawDelimiter: csv.rawDelimiter, fileName: task.fileName, semanticModel: task.semanticModel })
       const claimVerification = enforceVerifiedClaims(analysis)
       task.acceptedClaimIds = claimVerification.accepted.map((claim) => claim.claimId)
       if (reason === 'data') {
@@ -511,6 +512,7 @@ export class Orchestrator {
       this.emit(task, { type: 'state_delta', state: 'DESIGN' })
       this.log(task, 'tool', `按反馈重规划：${feedback || '（无附加说明）'}，偏好类型 ${kind}`)
       const titleBase = feedback.trim() ? feedback.trim().slice(0, 22) : task.fileName.replace(/\.csv$/i, '')
+      const normalizedChartType = normalizeRequestedChartType(requestedChartType)
       const plans = buildPlans(analysis, {
         fileName: task.fileName,
         titleBase,
@@ -518,7 +520,8 @@ export class Orchestrator {
         executed: false,
         userRequest: `${task.prompt}\n${feedback}`,
         preferenceEvents: this.preferencesFor(task).snapshot().events,
-        clarification: task.clarification
+        clarification: task.clarification,
+        requestedChartType: normalizedChartType
       })
       // feedback 触发的 plans_ready 生成新 PlotRevision 版本记录（旧版本保留在 planVersions）
       this.emit(task, { type: 'plans_ready', plans, reason, feedback: feedback.trim(), selectedPlanId: planId ?? task.selectedPlanId, selectionAudit: plans.selectionAudit, dataFingerprint: task.dataset.fingerprint })
@@ -564,6 +567,7 @@ export class Orchestrator {
     profile.warnings.forEach((w) => this.log(task, 'warn', `数据质量提示：${w}`))
     // v0.4.2：上传后立即生成数据概览（列类型/缺失率/数值范围/异常值提示/前几行预览），澄清轮询前随快照下发；异常值仅提示不改数据（数据包不变）。
     task.dataOverview = buildDataOverview(text, rawDelimiter, profile)
+    task.semanticModel = buildSemanticModel(profile, text, rawDelimiter)
     this.#alive(task)
 
     // ---- UNDERSTAND（确定性规则；配置 LLM 时优先 LLM，失败自动回退） ----
@@ -574,11 +578,21 @@ export class Orchestrator {
     const confirmIntent = async (q) => {
       const r = await parseIntentWithLlm(q, profile, { config: modelConfig, fetchImpl: this.modelFetch })
       const spec = r.source === 'llm' ? r.spec : parseIntent(q, profile)
+      task.taskSpec = spec
       if (r.source === 'llm') this.log(task, 'info', '意图解析来源：LLM（统计与结论仍由确定性管线产出）')
       else if (r.llmError) this.log(task, 'warn', `LLM 意图解析不可用（${r.llmError}），回退确定性规则`)
       if (spec.missingFields.length > 0) {
         const msg = `数据中不存在字段：${spec.missingFields.map((f) => `「${f}」`).join('、')}；已停止生成结论，不虚构字段（AGT-002 / 真实数据约束）`
         throw new ApiError(422, ERR.UNKNOWN_FIELD, msg, { availableFields: profile.columns.map((c) => c.name) })
+      }
+      const slotValidation = validateFieldSlots(spec, profile, task.semanticModel)
+      if (!slotValidation.ok) {
+        const first = slotValidation.errors[0]
+        const status = first.code === 'UNKNOWN_FIELD' ? 422 : 400
+        throw new ApiError(status, first.code === 'UNKNOWN_FIELD' ? ERR.UNKNOWN_FIELD : ERR.BAD_REQUEST, `字段槽位校验未通过：${slotValidation.errors.map((e) => e.message).join('；')}`, {
+          fieldErrors: slotValidation.errors,
+          availableFields: slotValidation.availableFields
+        })
       }
       return { spec, source: r.source }
     }
@@ -619,7 +633,7 @@ export class Orchestrator {
       const clarification = await runClarification(task, {
         ask,
         prefill: task.clarifyAnswers,
-        context: { columns: task.dataset?.columns ?? [], userProfile },
+        context: { columns: task.dataset?.columns ?? [], userProfile, intentSpec: task.taskSpec },
         // 第三轮注入推荐色板：综合用户历史配色学习先验 + 图型角色语义 + 可读性质量，top3 供表单点选
         decorate: async (round, payload, clarify) => {
           if (round !== 3) return payload
@@ -635,7 +649,8 @@ export class Orchestrator {
       this.log(task, 'info', `三轮需求澄清完成：目标=${clarification.goal}；图型偏好=${clarification.chartType}；标题=${clarification.title || '（按默认）'}；排版来源=${clarification.typography?.source ?? 'default'}`)
       intentStep.status = 'done'
       intentStep.durationMs = now()
-      intentStep.outputSummary = `[${intentSource}] TaskSpec：${(question.slice(0, 24) || '按默认映射')}；三轮澄清：图型偏好 ${clarification.chartType}，排版来源 ${clarification.typography?.source ?? 'default'}`
+      const roleSummary = Object.entries(task.semanticModel?.fieldRoles ?? {}).filter(([, fields]) => fields.length).map(([role, fields]) => `${role}=${fields.join('、')}`).join('；')
+      intentStep.outputSummary = `[${intentSource}] TaskSpec：${(question.slice(0, 24) || '按默认映射')}；字段角色：${roleSummary || '待确认'}；三轮澄清：图型偏好 ${clarification.chartType}，排版来源 ${clarification.typography?.source ?? 'default'}`
       this.emit(task, { type: 'state_delta', state: 'UNDERSTAND' })
       this.emit(task, { type: 'step_update', step: { ...intentStep } })
     } else if (question.length < 6 && userProfile.clarificationMode !== 'off') {
@@ -667,7 +682,8 @@ export class Orchestrator {
       }
       intentStep.status = 'done'
       intentStep.durationMs = now()
-      intentStep.outputSummary = `[${intentSource}] TaskSpec：${question.slice(0, 36)}；引用字段 ${spec.variables.join('、') || '按默认映射'}`
+      const roleSummary = Object.entries(task.semanticModel?.fieldRoles ?? {}).filter(([, fields]) => fields.length).map(([role, fields]) => `${role}=${fields.join('、')}`).join('；')
+      intentStep.outputSummary = `[${intentSource}] TaskSpec：${question.slice(0, 36)}；引用字段 ${spec.variables.join('、') || '按默认映射'}；字段角色 ${roleSummary || '待确认'}`
       this.emit(task, { type: 'state_delta', state: 'UNDERSTAND' })
       this.emit(task, { type: 'step_update', step: { ...intentStep } })
     } else {
@@ -675,7 +691,8 @@ export class Orchestrator {
         const r = await confirmIntent(question)
         spec = r.spec
         intentSource = r.source
-        s.outputSummary = `[${intentSource}] TaskSpec：${question.slice(0, 36)}；引用字段 ${spec.variables.join('、') || '按默认映射'}`
+        const roleSummary = Object.entries(task.semanticModel?.fieldRoles ?? {}).filter(([, fields]) => fields.length).map(([role, fields]) => `${role}=${fields.join('、')}`).join('；')
+        s.outputSummary = `[${intentSource}] TaskSpec：${question.slice(0, 36)}；引用字段 ${spec.variables.join('、') || '按默认映射'}；字段角色 ${roleSummary || '待确认'}`
       })
     }
 
@@ -703,7 +720,7 @@ export class Orchestrator {
     // ---- ANALYZE ----
     this.#alive(task)
     this.emit(task, { type: 'state_delta', state: 'ANALYZE' })
-    const analysis = runDeterministicAnalysis({ profile, text, rawDelimiter, fileName: task.fileName })
+    const analysis = runDeterministicAnalysis({ profile, text, rawDelimiter, fileName: task.fileName, semanticModel: task.semanticModel })
     const claimVerification = enforceVerifiedClaims(analysis)
     task.acceptedClaimIds = claimVerification.accepted.map((claim) => claim.claimId)
     await this.step(task, byId.stats_summarize, (s) => {
@@ -731,7 +748,8 @@ export class Orchestrator {
         executed: false,
         userRequest: question,
         preferenceEvents: this.preferencesFor(task).snapshot().events,
-        clarification: task.clarification
+        clarification: task.clarification,
+        taskSpec: task.taskSpec
       })
       s.outputSummary = `生成 ${plans.length} 套候选，覆盖清晰/惯例/密度三策略，evidenceIds 完全共享`
     })
@@ -802,7 +820,7 @@ export class Orchestrator {
       // 单方案验证（规格 + 证据）：验证器从原始 CSV 独立重算，不读生成器内部状态
       const v = verifyPlan(plan, out.result, { evidence: task.evidence, text: csv.text, rawDelimiter: csv.rawDelimiter })
       const verified = out.result.status === 'success' && v.passed
-      plan.verification = { passed: v.passed, checks: v.checks, quality: v.quality, artifactHash: v.artifactHash, codeHash: sha256(plan.code?.[out.engine] ?? ''), dataFingerprint: task.dataset?.fingerprint ?? null, revision: task.currentRevision ?? 0, engine: out.engine, attempts: out.attempts }
+      plan.verification = { passed: v.passed, checks: v.checks, quality: v.quality, layers: v.layers, artifactHash: v.artifactHash, codeHash: sha256(plan.code?.[out.engine] ?? ''), dataFingerprint: task.dataset?.fingerprint ?? null, revision: task.currentRevision ?? 0, engine: out.engine, attempts: out.attempts }
       plan.executionStatus = out.result.status === 'success' ? (verified ? 'verified' : 'rendered_unverified') : 'failed_execution'
       plan.dataProcessingSummary = plan.dataProcessingSummary.replace(
         /代码将在[\s\S]*?自动修复（(?:预算 [23] 次|最多 3 次)）。/,
@@ -855,6 +873,12 @@ export class Orchestrator {
     task.verification = {
       passed: overall.passed,
       difference: overall.difference,
+      layers: {
+        execution: { passed: plans.every(p => p.verification?.layers?.execution?.passed), label: '执行通过' },
+        semantic: { passed: plans.every(p => p.verification?.layers?.semantic?.passed), label: '统计与语义通过' },
+        visual: { passed: plans.every(p => p.verification?.layers?.visual?.passed), label: '视觉验收通过' },
+        deliverable: { passed: overall.passed, label: '可用于正式汇报或论文' }
+      },
       perPlan: Object.fromEntries(plans.map((p) => [p.plan_id, p.verification])),
       verifiedAt: now()
     }
@@ -913,6 +937,7 @@ export class Orchestrator {
       verified: verification.passed,
       checks: verification.checks,
       quality: verification.quality,
+      layers: verification.layers,
       hash: verification.artifactHash,
       svgFile: svgItem?.name,
       png: pngItem?.png ? { width: pngItem.png.width, height: pngItem.png.height } : undefined,

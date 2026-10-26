@@ -43,6 +43,17 @@ import { MODES } from './approval.js'
 import { calibrationReport } from './decision/metrics.js'
 
 export const PROTOCOL_VERSION = 1
+// 服务版本以 package.json 为唯一来源：打包/自检/健康检查读同一处，避免手工改版本号时漏改某处。
+// 打包产物中 package.json 与被复制的 src/ 同级，因此相对本文件解析即可。
+export const SERVICE_VERSION = (() => {
+  try {
+    const pkgPath = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'package.json')
+    const parsed = JSON.parse(fs.readFileSync(pkgPath, 'utf8'))
+    return typeof parsed.version === 'string' && parsed.version ? parsed.version : '0.0.0'
+  } catch {
+    return '0.0.0'
+  }
+})()
 const DEFAULT_MAX_BYTES = 60 * 1024 * 1024 // NFR-P01：单 CSV ≤ 50MB，留 10MB 余量
 
 export function createServer(options = {}) {
@@ -229,7 +240,7 @@ export function createServer(options = {}) {
 
   // 初始管理员引导：绝不使用跨安装实例共享的默认密码。
   if (!identityStore.state.users.some((user) => user.role === 'admin')) {
-    const adminUsername = String(process.env.LOCAL_AGENT_ADMIN_USERNAME ?? 'admin').trim().toLowerCase()
+    const adminUsername = String(process.env.LOCAL_AGENT_ADMIN_USERNAME ?? 'redacted').trim().toLowerCase()
     const configuredPassword = process.env.LOCAL_AGENT_ADMIN_PASSWORD
     const adminPassword = configuredPassword ?? randomBytes(24).toString('base64url')
     try {
@@ -466,7 +477,8 @@ export function createServer(options = {}) {
       // VS Code webview 是隔离源，插件 UI 直连本机 Agent 时也必须通过 CORS。
       const VSCODE_WEBVIEW_ORIGIN = /^(?:vscode-webview:\/\/[a-z0-9-]+|https:\/\/[a-z0-9-]+\.vscode-webview\.net)$/i
       const requestOrigin = typeof req.headers.origin === 'string' ? req.headers.origin : ''
-      const originAllowed = LOOPBACK_ORIGIN.test(requestOrigin) || VSCODE_WEBVIEW_ORIGIN.test(requestOrigin)
+      const TAURI_ORIGINS = new Set(['http://tauri.localhost', 'https://tauri.localhost', 'tauri://localhost'])
+      const originAllowed = LOOPBACK_ORIGIN.test(requestOrigin) || VSCODE_WEBVIEW_ORIGIN.test(requestOrigin) || (!remoteEnabled && TAURI_ORIGINS.has(requestOrigin))
 
       if (method === 'OPTIONS') {
         // 预检请求：直接 204，不进入鉴权与业务路由
@@ -490,7 +502,7 @@ export function createServer(options = {}) {
         return sendJson(res, 200, {
           status: 'ok',
           service: '@deep-imaging/local-agent',
-          version: '0.3.0',
+          version: SERVICE_VERSION,
           protocol: PROTOCOL_VERSION,
           persist: !!storage,
           restoredTasks: restored,
@@ -944,7 +956,7 @@ export function createServer(options = {}) {
             process.stderr.write(`[batch] 组 ${group.groupId} 合并数据解析失败：${e.message}\n`)
             continue
           }
-          const task = store.create({ title, engine, prompt: String(data.prompt ?? ''), fileName, bytes: merged, tenantId: principal.tenantId, projectId })
+          const task = store.create({ title, engine, prompt: String(data.prompt ?? ''), fileName, bytes: merged, tenantId: principal.tenantId, projectId, dataNature: data.dataNature, dataDisclosure: data.dataDisclosure })
           task.dataset = ingest.profile
           void runBackground(async () => {
             try { await orchestrator.run(task, ingest, modelConfigForIdentity(identity)) } catch { /* 后台任务失败不阻断批量响应 */ }
@@ -1043,7 +1055,7 @@ export function createServer(options = {}) {
             if (remoteEnabled && principal.tenantId !== 'local') {
               try { rateLimiter.beginTask(principal.tenantId) } catch (error) { throw new ApiError(429, error?.code ?? 'QUOTA_EXCEEDED', error?.message ?? '任务配额超限') }
             }
-            const task = store.create({ title, engine, prompt, fileName, bytes: file.buffer, tenantId: principal.tenantId, projectId })
+            const task = store.create({ title, engine, prompt, fileName, bytes: file.buffer, tenantId: principal.tenantId, projectId, dataNature: parsed.fields.dataNature, dataDisclosure: parsed.fields.dataDisclosure })
             task.dataset = ingest.profile
             task.clarify = ['true', '1'].includes(String(parsed.fields.clarify ?? '').trim())
             if (parsed.fields.clarifyAnswers) {
@@ -1405,7 +1417,7 @@ export function createServer(options = {}) {
         if (remoteEnabled && principal.tenantId !== 'local') {
           try { rateLimiter.beginTask(principal.tenantId) } catch (error) { throw new ApiError(429, error?.code ?? 'QUOTA_EXCEEDED', error?.message ?? '任务配额超限') }
         }
-        const task = store.create({ title: fileName, engine, prompt, fileName, bytes: file.buffer, tenantId: principal.tenantId })
+        const task = store.create({ title: fileName, engine, prompt, fileName, bytes: file.buffer, tenantId: principal.tenantId, dataNature: parsed.fields.dataNature, dataDisclosure: parsed.fields.dataDisclosure })
         task.dataset = ingest.profile
         // 多轮需求澄清（绘图前 ≥3 轮轮询）：前端随建任务提交 clarify=true 启用交互轮询；
         // clarifyAnswers（JSON）预填已确认的轮次，剩余轮次继续询问。
@@ -1459,7 +1471,7 @@ export function createServer(options = {}) {
 
       // ---- 任务级路由 ----
       const taskMatch =
-        /^\/api\/tasks\/([A-Za-z0-9_-]+)(\/(answer|events|preferences|replan|select|feedback|complete|preview|export|trace|cancel|retry))?$/.exec(pathName)
+        /^\/api\/tasks\/([A-Za-z0-9_-]+)(\/(answer|events|preferences|replan|select|feedback|complete|preview|export|trace|cancel|retry|paper-draft))?$/.exec(pathName)
       if (taskMatch) {
         const [, id, , sub] = taskMatch
         const task = store.get(id)
@@ -1521,6 +1533,19 @@ export function createServer(options = {}) {
           return sendJson(res, 200, { ok: true, taskId: task.taskId, state: 'UNDERSTAND' })
         }
 
+        if (sub === 'paper-draft' && method === 'POST') {
+          const data = await readJson(req).catch(() => ({}))
+          const plan = task.plans.find((item) => item.plan_id === String(data.planId ?? task.selectedPlanId ?? task.plans[0]?.plan_id))
+          if (!plan) throw new ApiError(404, ERR.PLAN_NOT_FOUND, '方案不存在')
+          const purpose = String(data.purpose ?? '').trim()
+          const section = String(data.section ?? '').trim()
+          if (!purpose || !section) return sendJson(res, 422, { ok: false, code: 'PAPER_CONTEXT_REQUIRED', questions: ['数据用于回答什么研究问题？', '拟放在论文哪个章节或图号？'] })
+          const material = plan.interpretation?.analysisParagraph ?? plan.insightSummary ?? '图表显示了观测数据的变化。'
+          const text = `在${purpose}的研究背景下，结果显示，${material} 本段拟用于${section}，仅作描述性解释；统计显著性、效应量和因果方向仍需结合研究设计与正式检验确认。`
+          plan.interpretation = { ...plan.interpretation, paperDraft: { status: 'ready', purpose, section, text, humanReviewRequired: true } }
+          return sendJson(res, 200, { ok: true, planId: plan.plan_id, paperDraft: plan.interpretation.paperDraft })
+        }
+
         // ---- SELECT（协议规范端点）：选择方案 → ITERATE，其他方案保留为可恢复分支 ----
         if (sub === 'select' && method === 'POST') {
           const data = await readJson(req).catch(() => ({}))
@@ -1536,8 +1561,9 @@ export function createServer(options = {}) {
           const feedback = (data.feedback ?? data.summary ?? '').toString()
           const kind = ['manual_edit', 'set_default', 'browse'].includes(data.kind) ? data.kind : 'manual_edit'
           const planId = data.planId ? String(data.planId) : undefined
+          const requestedChartType = data.chartType ?? data.requestedChartType ?? data.selectedChartType
           orchestrator.prepareFeedback(task, { feedback, kind, planId })
-          void runBackground(() => orchestrator.replan(task, { feedback, kind, planId }))
+          void runBackground(() => orchestrator.replan(task, { feedback, kind, planId, requestedChartType }))
           return sendJson(res, 202, { ok: true, taskId: task.taskId, state: task.state, revision: 'new' })
         }
 
@@ -1557,7 +1583,11 @@ export function createServer(options = {}) {
             const out = orchestrator.selectPlan(task, planId, { weight: data.weight, scope: data.scope })
             return sendJson(res, 200, { ok: true, preference: out.preference, selectedPlanId: task.selectedPlanId, ranking: out.ranking })
           }
-          if (task.state === 'FAILED' || task.state === 'COMPLETE') {
+          // 明确偏好（配色、字体、图例位置等）必须允许在导出/完成后记录，
+          // 否则用户看完图表后无法形成可追溯的学习成果。终态只写事件，不重排已冻结方案。
+          const terminal = task.state === 'FAILED' || task.state === 'COMPLETE'
+          const explicitStyle = (data.style && typeof data.style === 'object') || (data.attributes && typeof data.attributes === 'object')
+          if (terminal && !explicitStyle) {
             throw new ApiError(409, ERR.TASK_TERMINAL, `任务已处于终态 ${task.state}，不能再提交偏好`)
           }
           if (!task.plans.length) throw new ApiError(409, ERR.TASK_NOT_WAITING, '方案尚未生成，无法提交偏好')
@@ -1572,11 +1602,17 @@ export function createServer(options = {}) {
             confidence: 0.6,
             planId: plan?.plan_id,
             paletteId: plan?.palette?.id,
+            attributes: data.attributes && typeof data.attributes === 'object' ? data.attributes : undefined,
+            style: data.style && typeof data.style === 'object' ? data.style : undefined,
+            source: data.source ? String(data.source) : 'user_explicit',
             t: Date.now()
+          }
+          const preferenceResult = orchestrator.recordPreference(task, pref)
+          if (terminal) {
+            return sendJson(res, 200, { ok: true, preference: preferenceResult.event, preferenceWritten: preferenceResult.written, terminalRecorded: true, selectedPlanId: task.selectedPlanId })
           }
           // 排序变化只下发 preference 原因的 plans_ready，不产生新 PlotRevision 版本
           const reranked = applyPreference(task.plans, pref)
-          const preferenceResult = orchestrator.recordPreference(task, pref)
           store.emit(task, { type: 'plans_ready', plans: reranked, reason: 'preference' })
           return sendJson(res, 200, { ok: true, preference: preferenceResult.event, preferenceWritten: preferenceResult.written, selectedPlanId: task.selectedPlanId, ranking: reranked.map((p) => p.plan_id) })
         }
@@ -1986,7 +2022,7 @@ const isMain = process.argv[1] && process.argv[1] === fileURLToPath(import.meta.
 if (isMain) {
   const agent = createServer()
   agent.start().then(({ host, port, token: t, restored: n }) => {
-    process.stdout.write('[local-agent] research-plotting local agent started (v0.4.0)\n')
+    process.stdout.write(`[local-agent] research-plotting local agent started (v${SERVICE_VERSION})\n`)
     process.stdout.write(`[local-agent] HTTP  http://${host}:${port}/health\n`)
     process.stdout.write(`[local-agent] WS    ws://${host}:${port}/api/tasks/:id/events （连接后发送 {"type":"auth","token":"<TOKEN>"}）\n`)
     // Local hosts consume this boot handshake; production logs must never

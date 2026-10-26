@@ -4,8 +4,7 @@ import type { ReactNode } from 'react'
 
 export const AGREEMENT_VERSION = 'V1.2'
 export const AGREEMENT_EFFECTIVE = '2026 年 10 月 10 日'
-// 项目公开支持邮箱，由维护者授权公开。
-export const CONTACT_EMAIL = 'spark_sight@163.com'
+export const CONTACT_EMAIL = 'contact@example.com'
 
 function Toc() {
   return (

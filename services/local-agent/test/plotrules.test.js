@@ -1,7 +1,7 @@
 // 科研制图规则库测试（《数模国赛MATLAB制图规则 v0.4》通用精华：白底/字号下限/禁彩虹色/图注格式/样式复用）。
 import { test } from 'node:test'
 import assert from 'node:assert'
-import { PLOT_RULES, isValidHex, checkNoParentheses, checkCaption, validateSpecAgainstRules, StyleUsageTracker, defaultCaption } from '../src/plotRules.js'
+import { PLOT_RULES, isValidHex, checkNoParentheses, checkCaption, validateSpecAgainstRules, StyleUsageTracker, defaultCaption, checkRequestedChartType } from '../src/plotRules.js'
 
 test('Nature 9 色为 v0.4 §5.1 原样', () => {
   assert.deepEqual(PLOT_RULES.naturePalette, ['#6E8FB2', '#7DA494', '#EAB67A', '#E5A79A', '#C16E71', '#ABC8E5', '#D8A0C1', '#9F8DB8', '#D0D08A'])
@@ -63,6 +63,21 @@ test('validateSpecAgainstRules：多面板 tight 布局直接阻断标题重叠�
 test('validateSpecAgainstRules：缺少总标题直接阻断', () => {
   const violations = validateSpecAgainstRules({ figure: { rows: 1, cols: 1 }, panels: [] })
   assert.ok(violations.some((item) => item.rule === 'title_required' && item.level === 'error'))
+})
+
+test('validateSpecAgainstRules：高密度横轴与混合单位被门禁拦截', () => {
+  const violations = validateSpecAgainstRules({
+    figure: { title: '趋势' },
+    panels: [{ categoryCount: 36, scales: [{ axis: 'y', label: '温度', unit: '℃' }, { axis: 'y', label: '成本', unit: '元' }] }]
+  })
+  assert.ok(violations.some(v => v.rule === 'x_label_density' && v.level === 'error'))
+  assert.ok(violations.some(v => v.rule === 'mixed_units_single_axis' && v.level === 'error'))
+})
+
+test('checkRequestedChartType：显式图型不得静默替换', () => {
+  assert.equal(checkRequestedChartType('line', 'line_error').ok, true)
+  assert.equal(checkRequestedChartType('line', 'grouped_bar_error').ok, false)
+  assert.equal(checkRequestedChartType('auto', 'grouped_bar_error').ok, true)
 })
 
 test('StyleUsageTracker：同一样式最多 2 次（§6.2）', () => {

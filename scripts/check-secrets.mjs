@@ -92,7 +92,7 @@ let scanned = 0
 for (const file of files) {
   if (file === SELF || file === DENYLIST) continue
   let buffer
-  try { buffer = fs.readFileSync(file) } catch { continue }
+  try { buffer = process.argv.includes('--staged') ? execFileSync('git', ['show', `:${file}`], { maxBuffer: 64 * 1024 * 1024 }) : fs.readFileSync(file) } catch { continue }
   if (buffer.includes(0)) continue // 二进制
   scanned++
   const raw = buffer.toString('utf8')

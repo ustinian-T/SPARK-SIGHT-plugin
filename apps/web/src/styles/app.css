@@ -613,6 +613,24 @@
   min-height: 120px;
 }
 .chat__scroll > * { flex-shrink: 0; }
+.chat__welcome-intro {
+  height: auto;
+  padding: 16px 12px;
+  justify-content: flex-start;
+}
+.chat__welcome-intro .empty__icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+}
+.uploadzone:focus-visible {
+  outline: 2px solid var(--brand-600);
+  outline-offset: 3px;
+}
+@media (max-height: 600px) {
+  .chat__welcome-intro { padding: 8px 12px; }
+  .chat__welcome-intro .empty__icon { display: none; }
+}
 .msg {
   display: flex;
   gap: 9px;

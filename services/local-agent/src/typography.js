@@ -136,8 +136,11 @@ export function resolvePresentation(clarification = null, fallback = {}) {
 /** Remove layout/rendering metadata accidentally copied into a figure title. */
 export function sanitizeFigureTitle(value, fallback = '') {
   let title = String(value ?? '').trim().replace(/[「」“”\"]+/g, '')
+  const explicitTitle = /(?:^|\s)title\s*[=：:]\s*([^;；\n]+)/i.exec(title)?.[1]?.trim()
   title = title.replace(/【(?:制图规范|绘图规范|排版规范)】/g, '')
   title = title.replace(/(?:字体|字号|标题字号|图注字号|字色|字距|DPI|配色|输出模式|背景|最小字号|标题|图注|图例)\s*[=：:]\s*[^；;，,]+/gi, '')
+  // 结构化提示词的控制键不得泄漏到图题（例如 file=... x=... group=...）。
+  title = title.replace(/(?:file|chart|x|y|z|group|extra|error|replicates|plans|plan1|plan2|plan3|font|background|legend|caption|task|run|export|preference_action|palette|apply_to|keep_history|source|edit|value|confirm)\s*=\s*[^;；\n]+/gi, '')
   title = title.replace(/\s*[；;，,]+\s*/g, ' ').replace(/\s{2,}/g, ' ').trim()
-  return title || String(fallback ?? '').trim()
+  return explicitTitle || title || String(fallback ?? '').trim()
 }

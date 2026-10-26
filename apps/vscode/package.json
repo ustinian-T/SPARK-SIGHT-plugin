@@ -17,7 +17,7 @@
   "bugs": {
     "url": "https://github.com/ustinian-T/SPARK-SIGHT-plugin/issues"
   },
-  "version": "0.1.4",
+  "version": "0.1.6",
   "private": true,
   "engines": {
     "vscode": "^1.95.0"

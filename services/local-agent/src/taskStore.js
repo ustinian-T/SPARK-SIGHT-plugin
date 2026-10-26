@@ -12,13 +12,17 @@ export function newTaskId() {
   return `task_${Date.now().toString(36)}_${randomUUID().replace(/-/g, '').slice(0, 10)}`
 }
 
-export function createTaskRecord({ taskId, title, engine, prompt, fileName, bytes, tenantId = 'local', projectId = 'proj_default' }) {
+export function createTaskRecord({ taskId, title, engine, prompt, fileName, bytes, tenantId = 'local', projectId = 'proj_default', dataNature = 'unknown', dataDisclosure = '' }) {
+  const allowedDataNature = new Set(['unknown', 'synthetic_demo', 'real_research'])
+  const normalizedDataNature = allowedDataNature.has(String(dataNature)) ? String(dataNature) : 'unknown'
   return {
     taskId,
     tenantId,
     projectId, // 所属项目 ID（阶段 1：任务必须归属于且仅归属于一个 Project）
     state: 'INGEST',
     title,
+    dataNature: normalizedDataNature,
+    dataDisclosure: String(dataDisclosure ?? '').trim(),
     createdAt: Date.now(),
     dataset: undefined,
     steps: [],
@@ -163,7 +167,7 @@ export class TaskStore {
       // taskLocations 索引在 initTask 内部登记，后续 delete/replace/append 据此定位。
       this.storage.initTask(
         taskId,
-        { engine: task.execution.engine, prompt: init.prompt ?? '', fileName: init.fileName, title: task.title, createdAt: task.createdAt, tenantId: task.tenantId, projectId },
+        { engine: task.execution.engine, prompt: init.prompt ?? '', fileName: init.fileName, title: task.title, createdAt: task.createdAt, tenantId: task.tenantId, projectId, dataNature: task.dataNature, dataDisclosure: task.dataDisclosure },
         init.bytes,
         init.projectId || undefined
       )
@@ -252,7 +256,9 @@ export class TaskStore {
         prompt: rec.meta.prompt ?? '',
         fileName: rec.meta.fileName ?? 'data.csv',
         bytes: rec.bytes,
-        tenantId: rec.meta.tenantId ?? 'local'
+        tenantId: rec.meta.tenantId ?? 'local',
+        dataNature: rec.meta.dataNature ?? 'unknown',
+        dataDisclosure: rec.meta.dataDisclosure ?? ''
       })
       task.createdAt = rec.meta.createdAt ?? Date.now()
       task.restored = true
@@ -304,8 +310,14 @@ export class TaskStore {
       // 超过 TTL 的任务直接清理；未到期则按剩余时间计时
       const age = Date.now() - task.createdAt
       if (this.ttlMs > 0 && age > this.ttlMs) {
-        this.storage.deleteTask(rec.taskId)
-        this.projectStore?.removeTask(projectId, rec.taskId)
+        // 清理失败（文件被占用/权限受限）不得阻断启动：跳过该任务并继续恢复其余任务，
+        // 否则一个残留目录会让整个服务起不来。
+        try {
+          this.storage.deleteTask(rec.taskId)
+          this.projectStore?.removeTask(projectId, rec.taskId)
+        } catch {
+          /* 留待下次启动或手动清理 */
+        }
         continue
       }
       if (this.ttlMs > 0) {
@@ -341,6 +353,8 @@ export class TaskStore {
       projectId: task.projectId,
       state: task.state,
       title: task.title,
+      dataNature: task.dataNature,
+      dataDisclosure: task.dataDisclosure,
       createdAt: task.createdAt,
       dataset: task.dataset,
       dataOverview: task.dataOverview,

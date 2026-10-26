@@ -117,6 +117,21 @@ export function validateSpecAgainstRules(spec) {
   const titleCheck = checkNoParentheses(spec.figure.title)
   if (!titleCheck.ok) violations.push({ rule: 'no_parentheses_title', level: 'warn', message: titleCheck.reason })
   for (const panel of spec.panels ?? []) {
+    const categoryCount = Number(panel.categoryCount ?? panel.xCategoryCount ?? spec.figure.xCategoryCount)
+    if (Number.isFinite(categoryCount) && categoryCount > 24) {
+      violations.push({ rule: 'x_label_density', level: 'error', message: `横轴包含 ${categoryCount} 个类别，标签将难以辨认；请按时间/分组聚合、分面或改用点图` })
+    } else if (Number.isFinite(categoryCount) && categoryCount > 12) {
+      violations.push({ rule: 'x_label_density', level: 'warn', message: `横轴包含 ${categoryCount} 个类别，建议旋转标签或改用更稀疏的展示方式` })
+    }
+    const scaleUnits = (panel.scales ?? []).filter(s => s?.unit).map(s => `${s.axis ?? 'unknown'}:${s.unit}`)
+    const yUnits = (panel.scales ?? []).filter(s => s?.axis === 'y' && s?.unit).map(s => s.unit)
+    if (new Set(yUnits).size > 1 && !['dual_axis', 'dual_y'].includes(String(panel.type ?? panel.chartType))) {
+      violations.push({ rule: 'mixed_units_single_axis', level: 'error', message: `同一纵轴混用了不同单位（${[...new Set(yUnits)].join('、')}），请拆分面板或明确使用双 Y 轴` })
+    }
+    if (panel.chartType === 'dual_axis' || panel.type === 'dual_axis') {
+      const axisCount = new Set((panel.scales ?? []).filter(s => /^y/.test(String(s.axis))).map(s => s.axis)).size
+      if (axisCount > 2) violations.push({ rule: 'dual_axis_limit', level: 'error', message: '双 Y 轴图最多允许两个明确的 Y 轴' })
+    }
     for (const scale of panel.scales ?? []) {
       const sc = checkNoParentheses(scale.label)
       if (!sc.ok) violations.push({ rule: 'no_parentheses_axis', level: 'warn', message: sc.reason })
@@ -137,6 +152,50 @@ export function validateSpecAgainstRules(spec) {
     violations.push({ rule: 'max_colors', level: 'warn', message: `高区分度颜色 ${distinct.size} 种超过推荐上限 ${PLOT_RULES.maxDistinctColors} 种` })
   }
   return violations
+}
+
+/** 将用户明确点名的图型与最终渲染图型做硬一致性校验。 */
+export function checkRequestedChartType(requested, actual) {
+  const req = String(requested ?? '').trim().toLowerCase()
+  const got = String(actual ?? '').trim().toLowerCase()
+  if (!req || req === 'auto' || !got) return { ok: true }
+  const aliases = {
+    bar: ['bar', 'grouped_bar', 'grouped_bar_error'],
+    grouped_bar: ['grouped_bar', 'grouped_bar_error'],
+    line: ['line', 'line_error', 'multi_line'],
+    heatmap: ['heatmap', 'correlation_heatmap'],
+    dual_axis: ['dual_axis'],
+    surface3d: ['surface3d'],
+    scatter3d: ['scatter3d'],
+    scatter: ['scatter', 'point_scatter']
+  }
+  const accepted = aliases[req] ?? [req]
+  return accepted.includes(got)
+    ? { ok: true }
+    : { ok: false, reason: `用户明确选择 ${requested}，最终图型为 ${actual}；不得静默替换，请重新筛选候选或提示用户确认` }
+}
+
+/** 标题、坐标轴、图例与实际图层的显式元数据一致性门禁。 */
+export function validateTitleLayerConsistency(spec = {}) {
+  const errors = []
+  const displayed = new Set((spec.figure?.displayedFields ?? []).filter(Boolean).map(String))
+  for (const field of spec.figure?.titleFields ?? []) {
+    if (displayed.size && !displayed.has(String(field))) errors.push(`标题声明字段「${field}」未出现在实际图层`)
+  }
+  const groupField = spec.figure?.groupField
+  if (groupField) {
+    const hasLegend = (spec.panels ?? []).some((panel) => (panel.layers ?? []).some((layer) => layer.groupField === groupField || layer.seriesField === groupField))
+    const hasGroups = (spec.panels ?? []).some((panel) => panel.groups?.groupCol === groupField)
+    if (!hasLegend && !hasGroups) errors.push(`图例/分组声明字段「${groupField}」未绑定到图层`)
+  }
+  for (const panel of spec.panels ?? []) {
+    const yLabels = (panel.scales ?? []).filter((scale) => /^y/.test(String(scale.axis))).map((scale) => scale.label).filter(Boolean)
+    if (new Set(yLabels).size > 1 && !['dual_axis', 'dual_y'].includes(String(panel.type ?? panel.chartType))) {
+      errors.push('单纵轴面板存在多个不同纵轴标签')
+    }
+    if (panel.errorBarMode && !panel.errorBarDefinition) errors.push(`面板 ${panel.panelId ?? 'panel'} 使用误差棒但未声明 SD、SE、CI 或范围定义`)
+  }
+  return { ok: errors.length === 0, errors }
 }
 
 /**

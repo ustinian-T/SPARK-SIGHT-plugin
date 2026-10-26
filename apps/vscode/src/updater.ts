@@ -19,13 +19,14 @@ function versionParts(value: unknown): number[] {
   return parts
 }
 export function selectRelease(manifest: unknown, current: string): Release | null {
-  const value = manifest as { version: string; files: ReleaseFile[] }
-  const next = versionParts(value?.version), installed = versionParts(current)
+  const value = manifest as { version: string; vscodeVersion?: string; files: ReleaseFile[] }
+  const releaseVersion = value?.vscodeVersion ?? value?.version
+  const next = versionParts(releaseVersion), installed = versionParts(current)
   if (!Array.isArray(value.files)) throw new Error('发布清单无效')
   const file = value.files.find((entry) => entry.name === ARTIFACT_NAME)
   if (!file || !Number.isSafeInteger(file.bytes) || file.bytes <= 0 || file.bytes > 512 * 1024 * 1024 || !/^[a-f0-9]{64}$/i.test(file.sha256)) throw new Error('发布包信息无效')
   const different = next.findIndex((part, index) => part !== installed[index])
-  return different >= 0 && next[different] > installed[different] ? { version: value.version, file } : null
+  return different >= 0 && next[different] > installed[different] ? { version: releaseVersion, file } : null
 }
 export function verifyArtifact(bytes: Buffer, file: ReleaseFile): void {
   if (bytes.length !== file.bytes || createHash('sha256').update(bytes).digest('hex') !== file.sha256.toLowerCase()) throw new Error('升级包校验失败；未安装')

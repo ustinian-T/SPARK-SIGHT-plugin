@@ -1,115 +1,131 @@
 # SPARK SIGHT for DeepSeek Harness
 
-> 灵感视界 SPARK SIGHT — DeepSeek Harness 内的科研绘图插件。
+> 灵感视界 SPARK SIGHT — 深度融合进 DeepSeek Harness 的科研绘图插件。
 
 An independent, third-party plugin that brings SPARK SIGHT research-plotting
-capabilities into [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness).
+into [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness).
 **This is an independent plugin; it is not provided, endorsed, or certified by
 DeepSeek.**
 
+## What the native integration adds
+
+- **A switch beside the model selector.** A compact “绘图 / Plots” switch is
+  registered in `conversation.input.right`, immediately before
+  `conversation.input.model`. Turning it on for the first time opens a native
+  login dialog.
+- **Native local login.** Username/password, account registration, a one-click
+  bootstrap administrator, or a local guest. The signed identity token is kept
+  by the Host in the plugin data directory (`0600`); it is never stored in
+  `localStorage` and never sent to the browser.
+- **A real “绘图 / Plots” Conversation View** next to Trajectory. It renders the
+  actual SVG produced by the plotting pipeline, lists candidate plans,
+  clarification questions, feedback, export and settings — not an iframe.
+- **Model-callable tools.** DSH’s own model turn and polling now drive the
+  plotting backend through `sparksight_plot`, `sparksight_status`,
+  `sparksight_preview`, `sparksight_select`, `sparksight_answer`,
+  `sparksight_feedback`, and `sparksight_export`. A system-prompt section tells
+  the model when to use them.
+- **The full workbench is still one click away.** The same-origin Stage iframe
+  remains available for deep editing and the complete SPARK SIGHT UI.
+
+The switch controls whether the Plot View is active for a Session. The model
+tools are always registered; the prompt and the switch make their intended use
+explicit.
+
+![Native SPARK SIGHT Plot tab in DeepSeek Harness](docs/native-plot.png)
+
 ## Status
 
-Developer milestone **M3 — local backend connected**. The plugin installs into
-a Harness profile (primary target: the `desktop` profile used by the official
-desktop app) and places an "open workbench" button in the conversation input
-toolbar (the `conversation.input.left` slot). Clicking it opens a full-screen
-Stage whose iframe embeds the full SPARK SIGHT web app, served same-origin by
-the bundled `@deep-imaging/local-agent` sidecar. The sidecar injects a
-postMessage host bridge into that page, so the embedded app runs in **local
-mode** and talks directly to the sidecar's complete plotting backend — login →
-open data → plan → preview → export end to end, with no remote server. The
-agent is managed as a sidecar (boot token, `/health` readiness, process-tree
-teardown) under plain Node or Electron's `ELECTRON_RUN_AS_NODE`. Later
-milestones add model-callable tools, direct script execution, and publishing.
+Developer milestone **M4 — native DSH integration**. The Host half owns the
+local-agent sidecar and all credentials; the Client half registers native DSH
+slots and a Conversation View. Login → data → plans → preview → feedback →
+export works end to end without a remote server, and the model can drive the
+same pipeline through tools.
 
 ## Install
 
 The plugin renders in the Harness Web UI, which the official desktop app also
-uses: the desktop shell launches the `desktop` profile through the same Web
-application and loads its URL in Electron. Install the plugin into the profile
-you actually use.
-
-For the **desktop app** (SPARK SIGHT's primary target):
+uses. Install into the profile you actually use.
 
 ```sh
+# Official desktop app
 dsh plugin --profile desktop add sparksight-dsh
-```
 
-For the browser-based Web UI:
-
-```sh
+# Browser Web UI
 dsh plugin --profile web add sparksight-dsh
 ```
 
-During development, replace the package name with the local path, e.g.
-`dsh plugin --profile desktop add ./apps/dsh`. Restart Harness (or quit and
-reopen the desktop app) after installing.
+During development, use the local path:
 
-> **Why `platform` stays `web` for the desktop app too.** `dsh.client.platform`
-> identifies the rendering surface — the shared Web UI — and the loader only
-> accepts `web` (there is no separate desktop client platform). Whether the UI
-> appears in a browser or in Electron is selected by the **profile**
-> (`web` vs `desktop`), not by that field.
+```sh
+dsh plugin --profile desktop add ./apps/dsh
+```
 
-## Development
+Restart Harness (or quit and reopen the desktop app) after installing. For a
+manual development install, link `apps/dsh` into the profile's `node_modules`,
+add `"sparksight-dsh"` to `dsh.profile.bundles` and a
+`"sparksight-dsh": "link:<absolute path>"` dependency in the profile
+`package.json`, then restart. Do **not** add a bare `- id: sparksight-dsh` row to
+`cordis.patch.yml`: the plugin package carries its own `insert` patch, and a
+duplicate top-level row does not load the bundle.
 
-The plugin needs no build step: the Host (`index.js`) and Client (`client.js`)
-artifacts are committed directly and load as-is.
+## Native architecture
 
-- Host half runs in the Node-capable Harness process; it keeps zero runtime
-  dependencies beyond Node built-ins and the host's Connection fetch registry.
-- Client half is registered through the browser Module Loader; React and
-  react-dom are provided by the Harness module table.
+### Host half (`index.js`)
 
-## Stage architecture
+- Starts `@deep-imaging/local-agent` as a loopback sidecar with a stable
+  `LOCAL_AGENT_AUTH_SECRET` and a persistent data directory, so login survives
+  restarts.
+- Registers exact same-origin routes through `ctx.connection.fetch`:
+  `GET /api/sparksight/bootstrap`, the `/api/sparksight/auth/*` routes,
+  `POST /api/sparksight/api` (allow-listed JSON relay),
+  `POST /api/sparksight/tasks` (multipart upload),
+  `GET /api/sparksight/export` (ZIP download), and the optional Stage routes.
+- Registers the seven `sparksight_*` tools with raw JSON Schemas (no
+  `@deepseek-ai/dsh-tools` import, no build step) and a prompt section at order
+  ~1200.
+- Keeps the identity token host-side. The browser only sees a boolean login
+  state and a public user shape.
 
-The Stage embeds the exact web application shipped as the SPARK SIGHT
-web/desktop product — there is no second UI:
+### Client half (`client.js`)
 
-1. The Host starts the local-agent sidecar (M1) with `LOCAL_AGENT_WEB_DIST_DIR`
-   pointing at the web build (`resources/web/dist`, else `apps/web/dist`); the
-   agent serves that SPA same-origin (static assets need no token).
-2. The Host registers a same-origin route `GET /api/sparksight/stage` via the
-   Connection fetch registry (standard Web Request/Response). It returns only
-   the sidecar `webUrl` (never the boot token) and answers 503 while booting.
-3. When the sidecar serves the SPA's `index.html`, it injects an inline
-   bootstrap (right after `<head>`) that — only while framed — installs
-   `window.__DEEP_IMAGING_HOST__` over `window.parent.postMessage`.
-4. The Client button fetches the stage route, then opens an overlay with
-   `<iframe src="<webUrl>/#/app">`. The overlay relays each bridge message to a
-   same-origin `POST /api/sparksight/host` route and posts the response back to
-   the iframe using its exact origin.
-5. Inside the iframe the bridge puts the app in **local mode**: `agent.config`
-   supplies the sidecar baseUrl and boot token, after which all plotting calls
-   (projects, tasks, WebSocket events, preview, export) go directly to the
-   sidecar. `runtime.discover` reports the machine's real Python/R/MATLAB
-   engines (via the sidecar's probe); editor-only and direct-script-run calls
-   are honestly reported unsupported in this milestone.
+- Registers a real View definition for target `sparksight` with
+  `ctx.uiConversation.views.register`, plus a `conversation.view` slot entry at
+  order `15` (Trajectory is `10`, Chat is first).
+- Registers the model-adjacent switch in `conversation.input.right` at order
+  `20`.
+- Registers `zh`/`en` dictionaries, theme-token CSS, and the login dialog.
+- Polls the selected task through the Host relay; DSH supplies the model turn,
+  the browser view only reflects durable task state.
+- Uses the real `preview` SVG as a Blob URL. It does not re-render charts in the
+  browser.
 
-The iframe is cross-origin to the Harness page (a different loopback port).
-Child→parent requests carry no token and use `'*'` target; parent→child
-responses (which include the boot token) always use the iframe's exact origin.
-The sidecar runs in local-only mode (`LOCAL_ONLY_MODE=1`, `REMOTE_MODE=0`), so
-no data leaves the machine and MATLAB engine discovery stays available.
+### Login and local-first defaults
+
+The sidecar runs with `LOCAL_ONLY_MODE=1`, `REMOTE_MODE=0`,
+`LOCAL_AGENT_PERSIST=1`, and `LOCAL_AGENT_CLOUD_ACCOUNT_URL=''` by default, so
+accounts and data stay local. Set `cloudAccountUrl` explicitly to opt back into
+a cloud account service. A random bootstrap administrator is created on first
+boot; its credentials live in `admin-bootstrap.local` in the data directory and
+are never logged.
 
 ## Configuration
-
-The plugin row's `config` accepts these optional fields:
 
 | Field | Type | Default | Purpose |
 |---|---|---|---|
 | `autoStart` | boolean | `true` | Launch the sidecar when the plugin mounts |
 | `agentDir` | string | auto | Explicit local-agent directory; otherwise `resources/agent`, then the monorepo dev path |
 | `port` | number | `0` (random) | Fixed sidecar port via `LOCAL_AGENT_PORT` |
-| `dataDir` | string | agent default | Persistence directory via `LOCAL_AGENT_DATA_DIR` |
+| `dataDir` | string | `%LOCALAPPDATA%\SPARK-SIGHT\dsh\agent-data` | Persistence directory (`LOCAL_AGENT_DATA_DIR`) |
 | `webDir` | string | auto | Web build served same-origin; else `resources/web/dist`, then `apps/web/dist` |
-| `adminUsername` | string | `admin` | Bootstrap admin name via `LOCAL_AGENT_ADMIN_USERNAME` |
-| `adminPassword` | string | random | Bootstrap admin password via `LOCAL_AGENT_ADMIN_PASSWORD`; otherwise generated and shown once in the agent log |
+| `adminUsername` | string | `redacted` | Bootstrap admin name via `LOCAL_AGENT_ADMIN_USERNAME` |
+| `adminPassword` | string | random | Bootstrap admin password; otherwise generated into `admin-bootstrap.local` |
+| `cloudAccountUrl` | string | `''` | Optional cloud account endpoint; empty forces fully local identities |
 
 The agent binds `127.0.0.1` only and generates a random boot token on every
 start, which the Host reads from stdout. API calls use
 `Authorization: Bearer <token>` and the WebSocket authenticates after the
-handshake; the token never goes in the URL.
+handshake. The native UI never uses that boot token.
 
 ## Layout
 
@@ -117,35 +133,31 @@ handshake; the token never goes in the URL.
 apps/dsh/
 ├── package.json          # dsh.bundle.patch + dsh.client manifest
 ├── cordis.patch.yml      # inserts the plugin row into the profile composition
-├── index.js              # Host half (sidecar + stage + host-bridge relay routes)
+├── index.js              # Host half: sidecar, auth, relay, tools, prompt
+├── client.js             # Client half: toggle, login, Plot View, Stage overlay
 ├── lib/
-│   └── sidecar.js         # local-agent process manager
-├── client.js             # Client half (Module Loader factory + slot)
-├── locale/               # en.json / zh.json display metadata
-├── icon.svg              # original plugin icon
-├── LICENSE               # MIT (adapter code)
-└── THIRD_PARTY_NOTICES.md
+│   ├── agent-client.js   # loopback HTTP client + proxy allow-list
+│   ├── auth.js           # host-side token persistence + login modes
+│   ├── tools.js          # sparksight_* definitions + prompt section
+│   ├── sidecar.js        # sidecar process lifecycle
+│   ├── paths.js          # persistent data directory
+│   └── updater.js        # verified update check/download
+├── resources/agent/      # packaged local-agent
+├── resources/web/dist/   # packaged SPARK SIGHT web build
+└── locale/{zh,en}.json   # plugin-market metadata
 ```
 
-## License
+## Development
 
-The plugin adapter code in this directory is licensed under the
-[MIT License](LICENSE) — a genuine OSI-approved open source license. You may use,
-modify, and redistribute it, including commercially.
+No build step: Host and Client are committed as loadable ES modules. Client code
+uses `React.createElement` (no JSX) and the Harness module table for React.
+React DOM is optional; portals fall back to inline fixed-position rendering.
 
-The bundled resources it loads at runtime (the shared local Agent from
-`services/local-agent/` and the SPARK SIGHT web application from `apps/web/`)
-are **not** MIT: they are governed by the repository root
-[LICENSE](../../LICENSE), the Deep Imaging Noncommercial Attribution License 1.0.
-That is a source-available license with a noncommercial restriction and is **not**
-an OSI-approved open source license. Commercial use of those components requires
-prior written authorization.
+Run the plugin test suite:
 
-The bundled Noto Sans CJK SC font remains under the SIL Open Font License 1.1 and
-is not affected by either of the above.
+```sh
+node --test apps/dsh/*.test.js
+```
 
-See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for upstream attributions and
-[docs/licensing.md](../../docs/licensing.md) for the full scope map.
-"DeepSeek" is a trademark of DeepSeek and is used only to describe the host
-platform. This is an independent third-party plugin and is not provided,
-endorsed, certified, or sponsored by DeepSeek.
+The manual smoke scripts used during integration live outside the package and
+are not required at runtime.

@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "SPARK SIGHT",
-    "description": "Research plotting assistant inside DeepSeek Harness: open data, generate chart plans, preview and export reproducible figures."
+    "description": "Native DeepSeek Harness integration: a plot switch beside the model selector, a real preview tab, local accounts, and sparksight_* tools for reproducible research figures."
   }
 }

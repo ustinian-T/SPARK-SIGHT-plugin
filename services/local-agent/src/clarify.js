@@ -44,7 +44,7 @@ export function chartTypeQuestion(ctx = {}) {
       : '检测到可能的三维坐标字段；曲面图还要求坐标覆盖足够且可插值的空间网格，稀疏/非空间数据建议散点或二维分布图。'
   return {
     question: '第 2/3 轮 · 图型偏好：倾向使用哪种图型？（可选：热力图、双Y轴图、三维曲面图、三维散点图，或常规折线/柱状/散点/箱线）',
-    options: ['自动选择（推荐）', '分组柱状图（均值+误差棒）', '趋势与不确定性（折线+误差棒）', '分布与离群值（箱线+散点/小提琴）', '效应量与置信区间（森林图）', '相关结构（热力图）', '双Y轴图', '三维曲面图', '三维散点图'],
+    options: ['自动选择（推荐）', '分组柱状图（均值+误差棒）', '趋势与不确定性（折线+误差棒）', '分布与离群值（箱线+散点/小提琴）', '效应量与置信区间（森林图）', '相关结构（热力图）', '双Y轴图', '三维曲面图', '三维散点图', '三维折线图', '三维填充折线图'],
     hint: `回答“自动/默认”按数据结构推荐并说明依据；${suitabilityHint} 常见选择：趋势/时序用折线+误差棒，分布比较用箱线+原始散点或小提琴，效应量及置信区间用森林图；热力图/双Y轴需≥2个数值列。`
   }
 }
@@ -103,15 +103,19 @@ export function presentationQuestion(ctx = {}) {
   const recHint = recommended.length
     ? `；推荐配色（依据你的历史偏好）：${recommended.map((p) => `${p.name}(${p.id})`).join('、')}`
     : ''
+  const is3d = /(?:surface|scatter|line).*3d|3d/i.test(String(ctx.chartType ?? ''))
+  const processingHint = is3d
+    ? '；三维图可选二次处理：保留原始点、插值平滑、标点增强或聚类分层（默认保留原始点；仅对绘图派生数据处理并记录过程）'
+    : ''
   return {
-    question: '第 3/3 轮 · 标题、图注与排版：请给出图表标题与图注文字，以及字体/字色/字号/字距要求；没有要求将按科研制图默认执行（SimHei、标题15pt加粗居中、正文≥10pt、白底、300dpi）。',
+    question: `第 3/3 轮 · 标题、图注与排版：请给出图表标题与图注文字，以及字体/字色/字号/字距要求${processingHint}；没有要求将按科研制图默认执行（SimHei、标题15pt加粗居中、正文≥10pt、白底、300dpi）。`,
     options: ['全部按科研默认', '只改标题/图注，排版默认'],
     choiceGroups: [
       { key: 'labelLanguage', label: '标注语言', options: ['保持原始字段语言（推荐）', '中文', '英文', '中英双语'] },
       { key: 'legendPosition', label: '图例位置', options: ['自动避让（推荐）', '图外右侧', '图外顶部', '图外底部', '图内右上角'] }
     ],
     defaults: profileClarificationDefaults(ctx.userProfile),
-    hint: `格式示例：标题=各处理组日均产量；图注=图1-1 各处理组日均产量对比；字体=SimHei；标题字号=15；标题字色=#000000；图注字号=10.5；字距=1.1；配色=user_nature${recHint}`,
+    hint: `格式示例：标题=各处理组日均产量；图注=图1-1 各处理组日均产量对比；字体=SimHei；标题字号=15；标题字色=#000000；图注字号=10.5；字距=1.1；配色=user_nature${is3d ? '；二次处理=插值平滑' : ''}${recHint}`,
     recommendedPalettes: recommended
   }
 }
@@ -135,6 +139,8 @@ export function parseChartType(answer) {
   if (/双.?y|双轴|双纵轴|twin/i.test(a)) return { chartType: 'dual_axis' }
   if (/三维曲面|3d曲面|曲面|surf/i.test(a)) return { chartType: 'surface3d' }
   if (/三维散点|3d散点|三维点|scatter3/i.test(a)) return { chartType: 'scatter3d' }
+  if (/三维填充折线|3d填充折线|filled.?line3/i.test(a)) return { chartType: 'filled_line3d' }
+  if (/三维折线|3d折线|line3/i.test(a)) return { chartType: 'line3d' }
   if (/小提琴/i.test(a)) return { chartType: 'violin' }
   if (/森林|效应量.*置信区间|置信区间.*森林/i.test(a)) return { chartType: 'forest' }
   if (/分布|离群|箱线|原始散点/i.test(a)) return { chartType: 'box' }
@@ -204,6 +210,13 @@ export function parsePresentation(answer, ctx = {}) {
   const position = kv('图例位置')
   const positions = { '图外右侧': 'right', '图外顶部': 'top', '图外底部': 'bottom', '图内右上角': 'inside', '自动避让（推荐）': 'auto', '自动': 'auto', right: 'right', top: 'top', bottom: 'bottom', inside: 'inside', auto: 'auto' }
   if (Object.hasOwn(positions, position)) out.legendPosition = positions[position]
+  const processing = kv('二次处理') ?? kv('数据处理')
+  if (processing) {
+    if (/插值|平滑|加密/.test(processing)) out.secondaryProcessing = 'interpolate'
+    else if (/聚类|分层|分群/.test(processing)) out.secondaryProcessing = 'cluster'
+    else if (/标点|标记|增强/.test(processing)) out.secondaryProcessing = 'mark'
+    else if (/原始|不处理|保留/.test(processing)) out.secondaryProcessing = 'raw'
+  }
   return out
 }
 
@@ -231,6 +244,7 @@ export function defaultClarification(now = Date.now()) {
     caption: '',
     typography: resolveTypography({ source: 'default' }),
     paletteId: '',
+    secondaryProcessing: 'raw',
     complete: true,
     source: 'default',
     answeredAt: now,
@@ -253,6 +267,7 @@ export function mergePrefill(prefill = {}) {
     caption: String(p.caption ?? '').trim(),
     typography: typography ? resolveTypography({ ...typography, source: 'prefilled' }) : null,
     paletteId: String(p.paletteId ?? ''),
+    secondaryProcessing: p.secondaryProcessing ?? 'raw',
     ...profileClarificationDefaults(p),
     complete: false,
     source: 'prefilled',
@@ -274,6 +289,11 @@ export async function runClarification(task, opts = {}) {
   const answers = [...(merged.answers ?? [])]
   const skipped = new Set(merged.prefillRounds ?? [])
   if (context.userProfile?.clarificationMode === 'minimal') { skipped.add(2); skipped.add(3) }
+  // 已明确给出横轴/纵轴/分组且字段均可追溯时，不再机械重复询问任务与图型；
+  // 保留一次排版确认，让用户仍可修改标题、图注和配色。
+  if (context.intentSpec && (context.intentSpec.pendingFields ?? []).length === 0 && context.userProfile?.clarificationMode !== 'full') {
+    skipped.add(1); skipped.add(2)
+  }
 
   const clarify = { ...merged }
   for (const def of CLARIFY_ROUNDS) {
@@ -285,7 +305,7 @@ export async function runClarification(task, opts = {}) {
     let answered = null
     let recommendedPalettesOfRound = []
     if (typeof ask === 'function') {
-      const payload = def.round === 1 ? goalQuestion(context) : def.round === 2 ? chartTypeQuestion(context) : presentationQuestion(context)
+      const payload = def.round === 1 ? goalQuestion(context) : def.round === 2 ? chartTypeQuestion(context) : presentationQuestion({ ...context, chartType: clarify.chartType })
       // decorate：让调用方按当前澄清进度动态增强本轮（如第三轮注入推荐色板）
       const final = typeof decorate === 'function' ? ((await decorate(def.round, payload, clarify)) ?? payload) : payload
       recommendedPalettesOfRound = Array.isArray(final.recommendedPalettes) ? final.recommendedPalettes : []
@@ -307,6 +327,7 @@ export async function runClarification(task, opts = {}) {
       if (parsed.paletteId) clarify.paletteId = parsed.paletteId
       if (parsed.labelLanguage) clarify.labelLanguage = parsed.labelLanguage
       if (parsed.legendPosition) clarify.legendPosition = parsed.legendPosition
+      if (parsed.secondaryProcessing) clarify.secondaryProcessing = parsed.secondaryProcessing
       if (parsed.typography && Object.keys(parsed.typography).length) {
         clarify.typography = resolveTypography({ ...parsed.typography, source: 'interactive' })
       }

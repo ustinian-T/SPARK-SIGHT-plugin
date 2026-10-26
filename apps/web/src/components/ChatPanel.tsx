@@ -144,17 +144,25 @@ function Welcome() {
         </div>
       )}
 
-      <div className="empty" style={{ justifyContent: 'flex-start', paddingTop: 40 }}>
+      <div className="empty chat__welcome-intro">
         <div className="empty__icon"><Icon name="chart" size={28} /></div>
         <h3>从一份 CSV 开始</h3>
         <p>选择数据并预检，确认后生成三套可复现的科研图表方案。</p>
       </div>
 
       <div style={{ padding: '0 26px', maxWidth: 720, margin: '0 auto', width: '100%' }}>
-        <UserProfilePanel early onLoaded={profile => setClarify(profile.clarificationMode !== 'off')} />
         <div
           className={`uploadzone ${drag ? 'is-drag' : ''}`}
+          role="button"
+          tabIndex={0}
+          aria-label="上传 CSV 文件"
           onClick={() => inputRef.current?.click()}
+          onKeyDown={(e) => {
+            if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
+              e.preventDefault()
+              inputRef.current?.click()
+            }
+          }}
           onDragOver={(e) => { e.preventDefault(); setDrag(true) }}
           onDragLeave={() => setDrag(false)}
           onDrop={onDrop}
@@ -206,6 +214,8 @@ function Welcome() {
             </button>
           </div>
         )}
+
+        <UserProfilePanel early onLoaded={profile => setClarify(profile.clarificationMode !== 'off')} />
 
         <div style={{ marginTop: 12 }}>
           <label className="form-label">你希望图表重点说明什么（可选）</label>

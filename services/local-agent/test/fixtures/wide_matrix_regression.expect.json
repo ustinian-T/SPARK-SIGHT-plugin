@@ -1,0 +1,6 @@
+{
+  "dataset": "wide_matrix_regression.csv",
+  "roles": { "id": ["样本编号"], "group": ["处理组别"], "measure": ["响应指标", "表达水平", "温度/℃", "成本/元"] },
+  "plot": { "forbiddenDefaultAxis": "样本编号", "mixedUnitsRequireSplit": true },
+  "guards": ["identifier_exclusion", "unit_gate", "measure_only_correlation"]
+}

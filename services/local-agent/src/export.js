@@ -12,6 +12,8 @@ function evidenceMarkdown(task, plan) {
   const lines = []
   lines.push(`# 证据账本 — ${task.title}`, '')
   lines.push(`- 数据指纹：${task.dataset?.fingerprint ?? 'NA'}`)
+  lines.push(`- 数据性质：${task.dataNature === 'synthetic_demo' ? '构造数据，仅用于功能演示，不代表真实科研结论' : task.dataNature === 'real_research' ? '真实研究数据（需按授权和隐私要求使用）' : '未声明'}`)
+  if (task.dataDisclosure) lines.push(`- 数据披露：${task.dataDisclosure}`)
   lines.push(`- 数据规模：${task.dataset?.rows} 行 × ${task.dataset?.cols} 列`)
   lines.push(`- 方案：${plan?.plan_id}（${plan?.name ?? ''}）`)
   lines.push(`- 验证状态：${plan?.executionStatus ?? '未执行'}`, '')
@@ -39,6 +41,7 @@ function readmeText(task, plan) {
 
 方案：${plan.plan_id}（${plan.name}）
 图表类型：${plan.chartType}
+数据性质：${task.dataNature === 'synthetic_demo' ? '构造数据，仅用于功能演示，不代表真实科研结论' : task.dataNature === 'real_research' ? '真实研究数据' : '未声明'}
 适用场景：${plan.applicableScene}
 设计理由：${plan.rationale}
 图中信息：${plan.insightSummary ?? '见 evidence.md'}
@@ -117,6 +120,8 @@ export function buildExport(task, planId, storage = null, options = {}) {
     taskId: task.taskId,
     planId: plan.plan_id,
     datasetFingerprint: task.dataset?.fingerprint ?? null,
+    dataNature: task.dataNature ?? 'unknown',
+    dataDisclosure: task.dataDisclosure ?? '',
     dataVersion: task.dataVersions?.find((item) => item.current)?.version ?? null,
     planRevision: task.currentRevision ?? null,
     chartSpecSha256: sha256(JSON.stringify(plan.spec ?? {})),

@@ -1,0 +1,6 @@
+{
+  "dataset": "missing_outlier_regression.csv",
+  "roles": { "xTime": ["时间"], "group": ["实验组别"], "measure": ["响应指标", "表达水平"] },
+  "quality": { "missingResponseAtLeast": 1, "outlierResponseAtLeast": 1 },
+  "guards": ["missing_value_preserved", "outlier_only_warns", "no_synthetic_claim"]
+}

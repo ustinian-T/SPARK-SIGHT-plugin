@@ -501,6 +501,8 @@ interface StoreApi {
   choosePlan: (plan: PlotPlan) => void
   rejectPlan: (plan: PlotPlan) => void
   feedback: (text: string) => Promise<void>
+  confirmChartRecommendation: (chartType: string) => Promise<void>
+  generatePaperDraft: (planId: string, purpose: string, section: string) => Promise<unknown>
   proposePatch: (planId: string, patch: SpecPatch) => Promise<void>
   acceptPatch: () => Promise<void>
   cancelPatch: () => void
@@ -519,6 +521,7 @@ interface StoreApi {
   clearPrefs: () => void
   setPreferencePaused: (paused: boolean) => void
   revertPreference: (eventId: string) => void
+  recordStylePreference: (style: Record<string, string>) => Promise<void>
   // v0.4.0 优化：配色学习画像查询与重置（撤销/重置闭环）
   loadColorProfile: () => Promise<void>
   resetColorPreferences: () => void
@@ -951,6 +954,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           feedbackInFlight.current = false
         }
       },
+      async confirmChartRecommendation(chartType) {
+        if (!state.task) return
+        const client = clientRef.current
+        if (!client) { pushAssistant('后端连接未恢复，图型确认未提交。'); return }
+        if (feedbackInFlight.current) { pushAssistant('上一轮修改仍在执行，请等待验证完成后再确认。'); return }
+        feedbackInFlight.current = true
+        pushAssistant(`已确认采用${chartType}，正在重新规划并验证…`)
+        try {
+          await client.confirmChartRecommendation(chartType, state.task.selectedPlanId)
+        } catch (error) {
+          pushAssistant(`图型确认失败，请重试：${error instanceof Error ? error.message : String(error)}`)
+        } finally {
+          feedbackInFlight.current = false
+        }
+      },
+      async generatePaperDraft(planId, purpose, section) {
+        const result = await clientRef.current?.generatePaperDraft({ planId, purpose, section })
+        const draft = (result as any)?.paperDraft
+        if (draft && state.task) dispatch({ kind: 'hydrate_task', task: { ...state.task, plans: state.task.plans.map((plan) => plan.plan_id === planId ? { ...plan, interpretation: { ...plan.interpretation!, paperDraft: draft } } : plan) } })
+        return result
+      },
       async proposePatch(planId, patch) {
         const plan = state.task?.plans.find((p) => p.plan_id === planId)
         if (!plan) return
@@ -1110,6 +1134,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           // 撤销即遗忘：同步刷新配色学习画像（reverted 事件不再参与重建）
           await apiRef.current?.loadColorProfile().catch(() => {})
         }, (error) => pushAssistant(`撤销偏好失败：${error instanceof Error ? error.message : String(error)}`))
+      },
+      async recordStylePreference(style) {
+        const client = clientRef.current
+        if (!(client instanceof RealAgentClient)) throw new Error('记录明确偏好需要连接真实 Agent')
+        const summary = `用户明确选择：${Object.values(style).join('、')}`
+        const prefs = await client.recordStylePreference(style, summary)
+        dispatch({ kind: 'preference_state', paused: prefs.paused, events: prefs.events })
       },
       // v0.4.0 优化：拉取配色学习画像（学习摘要/逐色板统计），供偏好面板展示“为什么推荐这个色板”。
       async loadColorProfile() {

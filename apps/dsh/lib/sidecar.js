@@ -115,10 +115,17 @@ export class SidecarManager {
     env.LOCAL_AGENT_PERSIST = '1'
     env.LOCAL_AGENT_CLOUD_URL = ''
     env.LOCAL_AGENT_CLOUD_TOKEN = ''
-    env.LOCAL_AGENT_CLOUD_ACCOUNT_URL = process.env.DEEP_IMAGING_ACCOUNT_URL || 'https://account.example.com'
+    // Fully local by default: accounts, sessions and plotting data stay on this
+    // machine. Set config.cloudAccountUrl explicitly to opt into a cloud account.
+    env.LOCAL_AGENT_CLOUD_ACCOUNT_URL = String(this.config.cloudAccountUrl || process.env.DEEP_IMAGING_ACCOUNT_URL || '')
+    // A stable signing secret keeps the plugin's saved login valid across
+    // sidecar/DSH restarts. It lives in the persistent data directory (0600).
+    if (this.config.authSecret) env.LOCAL_AGENT_AUTH_SECRET = String(this.config.authSecret)
     // Port 0 / random token are the agent defaults; only override when configured.
     if (this.config.port) env.LOCAL_AGENT_PORT = String(this.config.port)
-    env.LOCAL_AGENT_DATA_DIR = resolvePersistentDataDir(this.config, { agentDir, env })
+    env.LOCAL_AGENT_DATA_DIR = this.config.dataDir
+      ? String(this.config.dataDir)
+      : resolvePersistentDataDir(this.config, { agentDir, env })
     // Serve the SPARK SIGHT web app same-origin (the Stage UI) when a build is present.
     if (webDistDir) env.LOCAL_AGENT_WEB_DIST_DIR = webDistDir
     // Bootstrap admin credentials for the plugin scenario (optional).
@@ -173,8 +180,14 @@ export class SidecarManager {
   /** Start the sidecar once; repeated calls share the same promise. */
   start() {
     if (this.#startPromise) return this.#startPromise
-    this.#startPromise = this.#start()
-    return this.#startPromise
+    const pending = this.#start()
+    this.#startPromise = pending
+    // Allow a later request to retry after a failed boot instead of pinning
+    // every login/tool call to the first rejection.
+    pending.catch(() => {
+      if (this.#startPromise === pending) this.#startPromise = null
+    })
+    return pending
   }
 
   async #start() {

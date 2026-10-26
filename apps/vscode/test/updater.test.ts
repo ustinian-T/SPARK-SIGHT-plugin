@@ -23,7 +23,6 @@ describe('trusted release selection and integrity', () => {
     const response = Object.assign(new EventEmitter(), { statusCode: 302, resume: vi.fn() })
     const req = Object.assign(new EventEmitter(), { end: () => {}, destroy: vi.fn() })
     vi.mocked(request).mockImplementation(((url: string, options: unknown, callback: (res: unknown) => void) => {
-      // 断言下载地址被固定在配置的发布源上，不接受任何用户可控输入拼接。
       expect(url).toBe(`${UPDATE_ORIGIN}/downloads/${ARTIFACT_NAME}`)
       req.end = () => callback(response)
       return req

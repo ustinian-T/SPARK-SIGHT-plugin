@@ -22,6 +22,11 @@ function copyText(text: string) {
 function InterpretationBlock({ plan }: { plan: PlotPlan }) {
   const interp = plan.interpretation
   if (!interp) return null
+  const { generatePaperDraft, confirmChartRecommendation } = useStore()
+  const [purpose, setPurpose] = useState('')
+  const [section, setSection] = useState('')
+  const [paperBusy, setPaperBusy] = useState(false)
+  const [paperError, setPaperError] = useState('')
   return (
     <div className="interpretation">
       <div className="interpretation__head">
@@ -44,9 +49,23 @@ function InterpretationBlock({ plan }: { plan: PlotPlan }) {
           <tbody>{interp.insightTable.map((row) => <tr key={`${row.evidenceId}-${row.metric}`}><td>{row.metric}</td><td>{row.result}</td><td>{row.criterion}</td></tr>)}</tbody>
         </table>
       )}
+      {interp.qualityNotes?.map((note) => <small key={note} className="form-hint">{note}</small>)}
+      {interp.chartRecommendation && <small className="form-hint">图型建议：{interp.chartRecommendation}</small>}
+      {interp.recommendation?.status === 'needs_confirmation' && <div className="form-error">建议先确认替代图型：{interp.recommendation.alternatives.join('、')} <Button size="xs" variant="ghost" onClick={() => void confirmChartRecommendation(interp.recommendation?.alternatives[0] ?? '')}>采用首选建议</Button></div>}
       <details className="interpretation__details">
-        <summary>分析段落（可直接改写进论文）</summary>
+        <summary>分析素材（需结合研究语境改写）</summary>
         <p>{interp.analysisParagraph}</p>
+      </details>
+      <details className="interpretation__details">
+        <summary>论文级表述（需补充用途与章节位置）</summary>
+        {interp.paperDraft?.status === 'ready' ? <p>{interp.paperDraft.text}</p> : <>
+          <p>{interp.paperDraft?.note ?? '请先说明数据用途和论文位置，再生成论文级表述。'}</p>
+          <input className="input" value={purpose} onChange={(e) => setPurpose(e.target.value)} placeholder="数据用于回答什么研究问题？" />
+          <input className="input" value={section} onChange={(e) => setSection(e.target.value)} placeholder="拟放在哪个章节或图号？" />
+          <Button size="xs" variant="primary" disabled={paperBusy} onClick={async () => { setPaperError(''); setPaperBusy(true); try { await generatePaperDraft(plan.plan_id, purpose, section) } catch (error) { setPaperError(error instanceof Error ? error.message : '生成失败，请检查后端连接后重试') } finally { setPaperBusy(false) } }}>{paperBusy ? '生成中…' : '生成论文级表述'}</Button>
+          {paperError && <small className="form-error">{paperError}</small>}
+        </>}
+        {interp.humanReview?.map((item) => <small key={item} className="form-hint">人工核对：{item}</small>)}
       </details>
       <details className="interpretation__details">
         <summary>图注建议</summary>
@@ -128,7 +147,7 @@ function PlanCard({ plan, onZoom, realSvg }: { plan: PlotPlan; onZoom: () => voi
           {plan.name}
         </div>
         <div className="plancard__strat">
-          <Badge tone="brand">{STRATEGY_LABEL[plan.strategy]}</Badge>{' '}
+          <Badge tone="brand">{plan.comparisonRole === 'user_request' ? '按用户要求' : `系统推荐 · ${STRATEGY_LABEL[plan.strategy]}`}</Badge>{' '}
           <Badge tone="muted">{plan.chartType}</Badge>
         </div>
       </div>

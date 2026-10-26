@@ -59,7 +59,7 @@ test('长表分组：生成的 Python 代码含分组聚合，按图型含分布
   const python = generateCodeForSpec(spec, input).python
   // 剔除 base64 元数据行后校验代码正文
   const body = python.split('\n').filter((line) => !line.includes('@deep-imaging-spec:')).join('\n')
-  assert.match(body, /groupby\("group"\)\["value"\]\.agg\(mean=/, '应分组聚合 mean/std/sem')
+  assert.match(body, /groupby\("group", sort=False\)\["value"\]\.agg\(mean=/, '应分组聚合 mean/std/sem')
   const kind = spec.panels[0].layers[0].kind
   if (kind === 'box_jitter') {
     assert.match(body, /boxplot\(_gparts/, '箱线+抖动应有 boxplot')
@@ -219,4 +219,10 @@ test('explicit axis display labels keep the original CSV field binding in all cl
  assert.ok(p.code.python.includes('set_ylabel("产量")'))
  assert.ok(p.code.r.includes('labs(x = "周次", y = "产量"'))
  assert.ok(p.code.matlab.includes("xlabel('周次'"))
+})
+
+test('grouped Python exports reserve rotated tick labels and x-axis title', () => {
+ const p = plansFor('group,value\na,1\na,2\nb,4\nb,5\n').find(plan => plan.strategy === 'clarity')
+ assert.match(p.code.python, /subplots_adjust\(top=0\.86, bottom=0\.30/)
+ assert.match(p.code.python, /groupby\("group", sort=False\)/)
 })

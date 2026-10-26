@@ -10,7 +10,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { runInSandbox, staticSafetyScan } from '../src/sandbox.js'
 import { classifyError, repair, MAX_REPAIRS } from '../src/repair.js'
-import { verifyPlan } from '../src/verify.js'
+import { verifyPlan, verifyAllPlans } from '../src/verify.js'
 import { generateCode, generateFallbackCode, expectedArtifacts } from '../src/codegen.js'
 import { runDeterministicAnalysis } from '../src/stats.js'
 import { buildPlans } from '../src/plans.js'
@@ -85,6 +85,23 @@ test('density 双面板 PNG 宽高比符合 1×2 布局代理校验', async () =
   })
   const png = result.artifacts.find((a) => a.name.endsWith('.png')).png
   assert.ok(png.width >= png.height * 1.6, `${png.width}x${png.height}`)
+})
+
+test('结构化三方案的时间×分组数据三套图均通过独立验证', async () => {
+  const csvName = 'time-group-demo.csv'
+  const csv = Buffer.from('时间,实验组别,响应指标\n第1周,对照组,2\n第1周,对照组,4\n第1周,处理组,5\n第1周,处理组,7\n第2周,对照组,6\n第2周,对照组,8\n第2周,处理组,10\n第2周,处理组,12\n')
+  const ing = ingestFile(csvName, csv)
+  const a = runDeterministicAnalysis({ profile: ing.profile, text: ing.text, rawDelimiter: ing.rawDelimiter, fileName: csvName })
+  const structured = 'file=time-group-demo.csv x=时间 y=响应指标 group=实验组别 error=标准差 plans=3 plan1=user_request plan2=system_recommended plan3=system_recommended title=处理条件下响应指标趋势'
+  const ps = buildPlans(a, { fileName: csvName, titleBase: structured, userRequest: structured, clarification: { chartType: 'line' } })
+  const results = {}
+  for (const p of ps) {
+    results[p.plan_id] = await runInSandbox({ workdir: tmpWorkdir(), engine: 'python', code: p.code.python, csvBuffer: csv, csvName, expected: [`${p.plan_id}.png`, `${p.plan_id}.svg`] })
+    assert.equal(results[p.plan_id].status, 'success', results[p.plan_id].stderr)
+  }
+  const v = verifyAllPlans(ps, results, { evidence: a.evidence, text: ing.text, rawDelimiter: ing.rawDelimiter })
+  assert.equal(v.passed, true, JSON.stringify(v, null, 2))
+  assert.deepEqual(ps.map(p => p.dataSuitability.chartType), ['line_error', 'box_plot', 'grouped_bar_error'])
 })
 
 test('静态安全扫描拦截违禁导入与调用', () => {

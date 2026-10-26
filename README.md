@@ -444,3 +444,8 @@ Python/matplotlib、R、MATLAB、Node.js 与云模型服务**均不随本仓库�
 | [apps/dsh/README.md](apps/dsh/README.md) | DSH 插件说明、Stage 架构与配置 |
 | [apps/web/README.md](apps/web/README.md) | 共享 Web UI |
 | [services/local-agent/README.md](services/local-agent/README.md) | 本地 Agent API 与运行方式 |
+
+
+## 2026-10-26 更新
+
+当前源码包含 VS Code 0.1.6 与 DSH 0.5.0；更新范围及发布配置说明见 [发布说明](docs/releases/2026-10-26.md)。源码不包含维护者的 API Key、私钥或用户数据。

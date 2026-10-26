@@ -101,3 +101,45 @@ test('LOCAL_AGENT_PERSIST=0 语义：persist:false 时不创建数据目录', as
   await agent.close()
   fs.rmSync(ephemeral, { recursive: true, force: true })
 })
+
+test('残留损坏任务目录不阻断启动：过期任务清理失败时跳过并继续恢复其余任务', async () => {
+  // 回归：TTL 清理与恢复在同一个循环里，deleteTask 抛错曾让整个服务启动失败
+  // （真实故障：残留任务目录 fs.rmSync 报 EPERM，server.start() 直接崩）。
+  // 系统层面无法可移植地"制造"删除失败，因此这里直接注入会抛错的 storage，
+  // 精确验证恢复循环的容错契约。
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'local-agent-broken-'))
+  try {
+    // 先正常落盘一个任务，再用它作为恢复输入
+    const h = await server()
+    let taskId
+    try {
+      const csv = 'week,control,treatment_a,treatment_b,control_sd,treatment_a_sd,treatment_b_sd\nW1,12.3,12.3,12.1,0.8,0.7,0.9\nW2,13.1,15.8,14.2,0.6,0.9,0.8\n'
+      const created = await createTask(h, { csv: Buffer.from(csv, 'utf-8'), fileName: 'good.csv' })
+      taskId = created.json.taskId
+      await waitForSnapshot(h, taskId, (t) => t.state === 'PRESENT')
+    } finally {
+      await h.close().catch(() => {})
+    }
+    fs.cpSync(dataDir, dir, { recursive: true, force: true })
+
+    const { TaskStore } = await import('../src/taskStore.js')
+    const { FileStorage } = await import('../src/storage.js')
+    const storage = new FileStorage(dir)
+    // 只取出本用例创建的那条记录，避免依赖 dataDir 中其他用例的残留
+    const records = storage.loadAll().filter((rec) => rec.taskId === taskId)
+    assert.equal(records.length, 1, `应读出本用例的任务记录，实际 ${records.length}`)
+
+    let deleteAttempts = 0
+    // 只让 deleteTask 失败，其余读写保持真实，从而精确落在恢复循环的清理分支
+    const throwingStorage = Object.create(storage)
+    throwingStorage.deleteTask = () => { deleteAttempts++; const e = new Error('EPERM: 目录被占用'); e.code = 'EPERM'; throw e }
+    throwingStorage.loadAll = () => records
+    throwingStorage.taskDir = storage.taskDir.bind(storage)
+
+    const store = new TaskStore({ storage: throwingStorage, ttlMs: 1 })
+    assert.doesNotThrow(() => store.restore(), '过期任务清理失败不得让 restore() 抛错')
+    assert.equal(deleteAttempts, 1, '过期清理分支应被触发一次（否则本用例没有覆盖到该路径）')
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})

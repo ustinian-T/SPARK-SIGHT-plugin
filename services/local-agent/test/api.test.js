@@ -27,11 +27,13 @@ test('GET /health 无需令牌返回服务与协议版本', async () => {
   assert.equal(body.status, 'ok')
   assert.equal(body.protocol, 1)
   assert.equal(body.service, '@deep-imaging/local-agent')
+  // 版本号必须与 package.json 一致：此前该字段硬编码，升级后会静默停留旧版本。
+  const pkg = JSON.parse(fs.readFileSync(path.join(here, '..', 'package.json'), 'utf8'))
+  assert.equal(body.version, pkg.version, `/health 版本应与 package.json 一致（${pkg.version}）`)
 })
 
 test('新实例不接受旧版固定管理员密码', async () => {
   if (process.env.LOCAL_AGENT_ADMIN_PASSWORD !== undefined) return
-  // 中性占位符：本用例只验证“旧版固定口令已失效”，公开仓库不保留任何真实历史凭据。
   const res = await fetch(`${h.base}/api/auth/login`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -55,6 +57,21 @@ test('VS Code webview 可完成本机 Agent 的 CORS 预检，其他站点不可
   assert.equal(embedded.headers.get('access-control-allow-origin'), desktopWebview)
   const hostile = await fetch(`${h.base}/health`, { headers: { origin: 'https://example.com' } })
   assert.equal(hostile.headers.get('access-control-allow-origin'), null)
+})
+
+test('Tauri installed webview can preflight and read the local Agent without allowing lookalike origins', async () => {
+  for (const origin of ['http://tauri.localhost', 'https://tauri.localhost', 'tauri://localhost']) {
+    const preflight = await fetch(`${h.base}/api/capabilities`, { method: 'OPTIONS', headers: { origin, 'access-control-request-method': 'GET', 'access-control-request-headers': 'authorization,x-agent-protocol' } })
+    assert.equal(preflight.headers.get('access-control-allow-origin'), origin)
+    const health = await fetch(`${h.base}/health`, { headers: { origin } })
+    assert.equal(health.headers.get('access-control-allow-origin'), origin)
+    const protectedResponse = await fetch(`${h.base}/api/tasks/missing`, { headers: { origin } })
+    assert.equal(protectedResponse.status, 401, 'CORS must not bypass bearer authentication')
+  }
+  for (const origin of ['http://tauri.localhost.evil.example', 'https://evil.example', 'null']) {
+    const response = await fetch(`${h.base}/health`, { headers: { origin } })
+    assert.equal(response.headers.get('access-control-allow-origin'), null)
+  }
 })
 
 test('未携带令牌访问受保护接口返回 401 稳定错误', async () => {

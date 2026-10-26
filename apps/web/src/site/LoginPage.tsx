@@ -176,7 +176,7 @@ export function LoginPage() {
 
           <div className="sd-tabs" role="tablist">
             <button role="tab" aria-selected={tab === 'user'} className={tab === 'user' ? 'active' : ''} onClick={() => { setTab('user'); setError(''); setSuccess('') }}>用户登录</button>
-            {!window.__SPARK_VSCODE__ && <button role="tab" aria-selected={tab === 'admin'} className={tab === 'admin' ? 'active' : ''} onClick={() => { setTab('admin'); setError(''); setSuccess('') }}>管理员登录</button>}
+            <button role="tab" aria-selected={tab === 'admin'} className={tab === 'admin' ? 'active' : ''} onClick={() => { setTab('admin'); setError(''); setSuccess('') }}>管理员登录</button>
             {!embedded && (
               <button role="tab" aria-selected={tab === 'register'} className={tab === 'register' ? 'active' : ''} onClick={() => { setTab('register'); setError(''); setSuccess('') }}>注册</button>
             )}
@@ -268,7 +268,7 @@ export function LoginPage() {
           {embedded && (
             <div className="sd-auth__embed">
               桌面端 / 插件暂不支持注册。请前往
-              <a className="sd-link" href="#/" onClick={(e) => { e.preventDefault(); if (window.__SPARK_VSCODE__) void window.__SPARK_VSCODE__.openWebsite(); else navigate('/') }}> 官网 </a>
+              <a className="sd-link" href="#/" onClick={(e) => { e.preventDefault(); navigate('/') }}> 官网 </a>
               或网页端完成注册后，再使用同一账号登录。账号与明确保存的绘图偏好四端通用，本地项目、数据和聊天不会自动上传。
             </div>
           )}

@@ -7,6 +7,7 @@ const fmt = (n, d = 3) => {
   if (!Number.isFinite(n)) return null
   return String(Math.round(n * 10 ** d) / 10 ** d)
 }
+const fmtP = (p, d = 6) => Number.isFinite(p) && p < 0.001 ? '<0.001' : fmt(p, d)
 const dir = (v) => (v > 0 ? '上升' : v < 0 ? '下降' : '基本持平')
 
 /**
@@ -19,7 +20,7 @@ const dir = (v) => (v > 0 ? '上升' : v < 0 ? '下降' : '基本持平')
  * }}
  */
 export function buildInterpretation(ctx) {
-  const { summary, evidence, claims, title, caption } = ctx
+  const { summary, evidence, claims, title, caption, chartType = '' } = ctx
   const byId = new Map((evidence ?? []).map((e) => [e.evidence_id, e]))
   const insights = []
   const insightTable = []
@@ -38,7 +39,14 @@ export function buildInterpretation(ctx) {
       const last = observed[observed.length - 1]
       if (first === undefined || last === undefined || !Number.isFinite(first) || !Number.isFinite(last)) continue
       const change = last - first
+      const deltas = observed.slice(1).map((value, index) => value - observed[index])
+      const positive = deltas.filter((value) => value > 0).length
+      const negative = deltas.filter((value) => value < 0).length
+      const shape = positive === deltas.length || negative === deltas.length ? '单调变化' : positive && negative ? '存在阶段性波动' : '变化有限'
+      const turningPoints = deltas.slice(1).filter((value, index) => Math.sign(value) !== Math.sign(deltas[index]) && value !== 0 && deltas[index] !== 0).length
       const pct = first !== 0 ? Math.round(((last - first) / first) * 1000) / 10 : null
+      const slope = Number.isFinite(ev.details?.slope) ? ev.details.slope : null
+      const r2 = Number.isFinite(ev.details?.r2) ? ev.details.r2 : null
       const delta = pct !== null
         ? `${dir(change)} ${Math.abs(change) >= 1e-9 ? `${fmt(Math.abs(change))}（${pct > 0 ? '+' : ''}${fmt(pct)}%）` : '基本不变'}`
         : `${dir(change)} ${fmt(Math.abs(change))}（基线为 0，百分比未定义）`
@@ -46,10 +54,10 @@ export function buildInterpretation(ctx) {
         id: `insight_trend_${summary.series.indexOf(s)}`,
         kind: 'trend',
         title: `${s.label} 的变化趋势`,
-        text: `「${s.label}」在观测区间内${delta}，首末值分别为 ${fmt(first)} 与 ${fmt(last)}`,
+        text: `「${s.label}」在观测区间内${delta}，呈${shape}${turningPoints ? `，检测到${turningPoints}处方向反转` : ''}，首末值分别为 ${fmt(first)} 与 ${fmt(last)}${slope !== null && r2 !== null ? `；线性拟合斜率=${fmt(slope)}、R²=${fmt(r2)}（按观测序号）` : ''}`,
         evidenceId: ev.evidence_id
       })
-      insightTable.push({ metric: `${s.label}变化`, result: delta, criterion: '描述性判断：相对变化幅度≥20%可视为明显变化；需结合领域阈值复核。', evidenceId: ev.evidence_id })
+      insightTable.push({ metric: `${s.label}变化`, result: `${delta}${slope !== null && r2 !== null ? `；斜率=${fmt(slope)}，R²=${fmt(r2)}` : ''}`, criterion: '描述性判断：相对变化幅度≥20%可视为明显变化；R²仅表示线性拟合程度，不代表因果或显著性。', evidenceId: ev.evidence_id })
       if (trendParts.length < 3) trendParts.push(`「${s.label}」${delta}（${fmt(first)} → ${fmt(last)}${pct !== null ? `，${pct > 0 ? '+' : ''}${fmt(pct)}%` : ''}）`)
     }
     const peakEv = byId.get('ev_peak')
@@ -64,7 +72,7 @@ export function buildInterpretation(ctx) {
       insightTable.push({ metric: '末点最高系列', result: peakEv.value.replace(/（[^）]*）$/, ''), criterion: '比较同一观测点的中心趋势；不代表统计显著或因果优势。', evidenceId: 'ev_peak' })
       trendParts.push(`末点最高为 ${peakEv.value.replace(/（[^）]*）$/, '')}`)
     }
-    if (trendParts.length) paragraph.push(`描述性结果显示，${trendParts.join('；')}。`)
+    if (trendParts.length) paragraph.push(`变化趋势显示，${trendParts.join('；')}。`)
   }
 
   // ---------- 2. 组间比较（ANOVA + 两两 t 检验，Holm 校正） ----------
@@ -76,18 +84,18 @@ export function buildInterpretation(ctx) {
       id: 'insight_anova',
       kind: 'comparison',
       title: '组间整体差异检验',
-      text: `单因素方差分析显示组间差异${a.significant ? `显著（F=${fmt(a.statistic)}，p=${fmt(a.pValue)}，η²=${fmt(a.etaSq)}${stars ? `，${stars}` : ''}）` : `不显著（F=${fmt(a.statistic)}，p=${fmt(a.pValue)}）`}`,
+      text: `单因素方差分析显示组间差异${a.significant ? `显著（F=${fmt(a.statistic)}，p=${fmtP(a.pValue)}，η²=${fmt(a.etaSq)}${stars ? `，${stars}` : ''}）` : `不显著（F=${fmt(a.statistic)}，p=${fmtP(a.pValue)}）`}`,
       evidenceId: 'ev_anova'
     })
-    insightTable.push({ metric: '整体组间差异', result: a.significant ? `显著（p=${fmt(a.pValue)}）` : `不显著（p=${fmt(a.pValue)}）`, criterion: '通常以 p<0.05 判为统计学显著，同时报告效应量与置信区间。', evidenceId: 'ev_anova' })
-    if (a.significant) paragraph.push(`单因素方差分析表明${grouped?.groupCol ?? '组间'}整体差异显著（F=${fmt(a.statistic)}，p=${fmt(a.pValue)}，η²=${fmt(a.etaSq)}）。`)
+    insightTable.push({ metric: '整体组间差异', result: a.significant ? `显著（p=${fmtP(a.pValue)}）` : `不显著（p=${fmtP(a.pValue)}）`, criterion: '通常以 p<0.05 判为统计学显著，同时报告效应量与置信区间。', evidenceId: 'ev_anova' })
+    if (a.significant) paragraph.push(`单因素方差分析表明${grouped?.groupCol ?? '组间'}整体差异显著（F=${fmt(a.statistic)}，p=${fmtP(a.pValue)}，η²=${fmt(a.etaSq)}）。`)
   }
   const tTests = (evidence ?? []).filter((e) => e.tool === 'stats.t_test' && e.details?.performed)
   const significantPairs = tTests.filter((e) => (e.details?.pAdjusted ?? 1) < 0.05)
   if (significantPairs.length) {
     const pairTexts = significantPairs.slice(0, 3).map((e) => {
       const d = e.details
-      return `${d.left} 与 ${d.right}（p_adj=${fmt(d.pAdjusted)}${d.stars && d.stars !== 'ns' ? `，${d.stars}` : ''}）`
+      return `${d.left} 与 ${d.right}（p_adj=${fmtP(d.pAdjusted)}${d.stars && d.stars !== 'ns' ? `，${d.stars}` : ''}）`
     })
     insights.push({
       id: 'insight_pairs',
@@ -98,7 +106,7 @@ export function buildInterpretation(ctx) {
     })
     for (const e of significantPairs.slice(0, 5)) {
       const d = e.details
-      insightTable.push({ metric: `${d.left} vs ${d.right}`, result: `p_adj=${fmt(d.pAdjusted)}`, criterion: 'Holm校正后 p_adj<0.05 通常判为显著；应结合效应量与样本量解释。', evidenceId: e.evidence_id })
+      insightTable.push({ metric: `${d.left} vs ${d.right}`, result: `p_adj=${fmtP(d.pAdjusted)}`, criterion: 'Holm校正后 p_adj<0.05 通常判为显著；应结合效应量与样本量解释。', evidenceId: e.evidence_id })
     }
     paragraph.push(`经 Welch t 检验并进行 Holm 校正，显著配对为：${pairTexts.join('；')}。`)
   } else if (anovaEv?.details?.performed) {
@@ -116,7 +124,7 @@ export function buildInterpretation(ctx) {
       id: `insight_corr_${e.evidence_id.replace('ev_significance_', '')}`,
       kind: 'correlation',
       title: `${e.fields[0]} 与 ${e.fields[1]} 的相关性`,
-      text: `${e.fields[0]} 与 ${e.fields[1]} 呈${r > 0 ? '正' : '负'}相关（r=${fmt(r, 4)}，n=${d.n}，p=${fmt(d.pValue)}${d.significant ? '，显著' : '，未达显著'}），相关强度${strength}`,
+      text: `${e.fields[0]} 与 ${e.fields[1]} 呈${r > 0 ? '正' : '负'}相关（r=${fmt(r, 4)}，n=${d.n}，p=${fmtP(d.pValue)}${d.significant ? '，显著' : '，未达显著'}），相关强度${strength}`,
       evidenceId: e.evidence_id
     })
     insightTable.push({ metric: `${e.fields[0]}–${e.fields[1]}相关`, result: `r=${fmt(r, 4)}（${strength}）`, criterion: '|r|≥0.8强，0.5–0.8中等，<0.5较弱；相关不等于因果。', evidenceId: e.evidence_id })
@@ -125,7 +133,7 @@ export function buildInterpretation(ctx) {
   if (sigCorr.length) {
     paragraph.push(sigCorr.map((e) => {
       const d = e.details
-      return `${e.fields[0]} 与 ${e.fields[1]} 显著${d.r > 0 ? '正' : '负'}相关（r=${fmt(d.r, 4)}，p=${fmt(d.pValue)}）`
+      return `${e.fields[0]} 与 ${e.fields[1]} 显著${d.r > 0 ? '正' : '负'}相关（r=${fmt(d.r, 4)}，p=${fmtP(d.pValue)}）`
     }).join('；') + '。')
   }
 
@@ -187,6 +195,20 @@ export function buildInterpretation(ctx) {
   const sampleNote = Number.isFinite(summary?.x?.length) && summary.x.length > 0 ? `；有效观测点 n=${summary.x.length}` : ''
   const captionSuggestion = `${base}${sampleNote}${statNote}`
 
+  const typeAdvice = /箱线|小提琴/.test(chartType) ? '重点关注中位数、离散程度、异常值和多峰形态。' : /散点/.test(chartType) ? '重点关注变量关系、聚集形态和异方差；相关不等于因果。' : /热力/.test(chartType) ? '重点关注高低值区域和变量相似结构；颜色差异不等同于显著性。' : /森林/.test(chartType) ? '重点关注效应量方向、置信区间宽度及其是否跨越零。' : /堆叠/.test(chartType) ? '应分别解释总量变化与组成比例变化，不能只比较颜色面积。' : /双.?Y轴/.test(chartType) ? '双 Y 轴可能放大视觉差异，应核对单位、比例和两个尺度的独立含义。' : /三维/.test(chartType) ? '三维图受视角、遮挡和投影影响，应同时核对二维投影或数据域。' : '重点关注水平差异、变化方向和不确定性。'
+  const count = summary?.series?.length ?? 0
+  const chartRecommendation = /三维曲面|三维散点/.test(chartType) && count < 3
+    ? '当前数值维度不足以支持三维表达。'
+    : /饼图|环形图/.test(chartType) && count > 8
+      ? '类别数量较多，饼图角度比较困难。'
+      : ''
+  const dynamicAlternatives = /三维/.test(chartType)
+    ? (summary?.groups ? ['箱线图', '小提琴图', '分组柱状图'] : ['二维散点图', '折线图', '热力图'])
+    : /饼图|环形图/.test(chartType) ? ['排序条形图', '点图', '堆叠条形图'] : []
+  const recommendation = chartRecommendation
+    ? { status: 'needs_confirmation', reason: chartRecommendation, alternatives: dynamicAlternatives }
+    : { status: 'accepted', reason: '当前图型与已识别数据形态一致。', alternatives: [] }
+  analysisParagraph += ` ${typeAdvice} 未提供正式检验或研究设计支持时，不使用“导致”“证明”等因果措辞。`
   const summaryText = insights.filter((item) => item.kind !== 'quality').slice(0, 3).map((item) => item.text).join('；') || '图表展示数据的主要差异与变化趋势，具体结论以统计证据为准。'
-  return { insights, analysisParagraph, captionSuggestion, summaryText, insightTable }
+  return { insights, analysisParagraph, captionSuggestion, summaryText, insightTable, qualityNotes: ['当前文字为描述性分析，需结合样本量、重复测量结构和领域阈值复核。'], humanReview: ['核对变量含义、研究设计、章节语气和因果边界。'], chartRecommendation, recommendation, paperDraft: { status: 'needs_context', note: '如需论文级表述，请补充数据用途、论文位置和目标读者。' } }
 }
