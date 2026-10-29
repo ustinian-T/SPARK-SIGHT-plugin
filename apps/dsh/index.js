@@ -21,7 +21,7 @@ import { createSparksightTools, registerSparksightPrompt } from './lib/tools.js'
 import { resolvePersistentDataDir } from './lib/paths.js'
 import { checkUpdate, downloadUpdate, ARTIFACT_NAME } from './lib/updater.js'
 
-export const VERSION = '0.5.1'
+export const VERSION = '0.5.2'
 const PACKAGE_DIR = dirname(fileURLToPath(import.meta.url))
 const MAX_UPLOAD_BYTES = 64 * 1024 * 1024
 
@@ -253,6 +253,8 @@ export function apply(ctx, config = {}) {
         ready,
         webStage: Boolean(sidecar.endpoint?.webUrl),
         loginRequired: true,
+        authMode: sidecar.accountOrigin ? 'cloud' : 'local',
+        accountOrigin: sidecar.accountOrigin,
         ...status,
         engines: ['python', 'r', 'matlab'],
         features: {
@@ -276,9 +278,9 @@ export function apply(ctx, config = {}) {
 
   for (const [route, handler] of [
     ['login', (body) => auth.login(body)],
-    ['register', (body) => auth.register(body)],
+    ['register', (body) => { if (sidecar.accountOrigin) throw codedHostError('CLOUD_REGISTRATION_REQUIRED', '请在官网注册账号，然后使用官网账号登录'); return auth.register(body) }],
     ['anonymous', () => auth.anonymous()],
-    ['local-admin', () => auth.localAdmin()],
+    ['local-admin', () => { if (sidecar.accountOrigin) throw codedHostError('CLOUD_ACCOUNT_REQUIRED', '当前使用云端账号服务，请使用官网已有账号登录'); return auth.localAdmin() }],
   ]) {
     ctx.effect(() => ctx.connection.fetch.register({
       path: `/api/sparksight/auth/${route}`,

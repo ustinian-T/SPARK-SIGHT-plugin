@@ -38,9 +38,11 @@ window.__ModuleLoader__.load({
       'toggle.enable.desc': '绘图模式会把 SPARK SIGHT 的科研绘图工具交给当前模型，并在对话顶部提供预览与设定。数据与账户都留在本机。',
       'toggle.switch': '切换 SPARK SIGHT 绘图模式',
       'login.title': '登录 SPARK SIGHT',
-      'login.subtitle': '账户与本机数据只保存在这台电脑上',
+      'login.subtitle': '使用官网已有账号登录；项目、聊天和 API 配置仍保存在本机',
       'login.tab.login': '登录',
       'login.tab.register': '注册',
+      'login.websiteRegister': '官网注册',
+      'login.localSubtitle': '本地离线模式：账户和绘图数据保存在本机',
       'login.username': '账户名',
       'login.username.hint': '至少 6 位，字母、数字、点、下划线或连字符',
       'login.password': '密码',
@@ -123,7 +125,7 @@ window.__ModuleLoader__.load({
       'task.polling': '正在轮询任务状态',
       'task.error': '任务出错',
       'task.login': '登录后查看绘图任务',
-      'task.login.desc': 'SPARK SIGHT 需要本机账户。登录后，模型工具和此页签会共用同一个本机会话。',
+      'task.login.desc': '使用 SPARK SIGHT 官网账号登录。模型工具和此页签共用本机会话，绘图数据仍保存在本机。',
       'task.open.workbench': '在完整工作台中打开',
       'settings.tab.task': '任务',
       'settings.tab.settings': '设定',
@@ -164,9 +166,11 @@ window.__ModuleLoader__.load({
       'toggle.enable.desc': 'Plot mode gives the current model the SPARK SIGHT research-plotting tools and adds preview and settings above the conversation. Data and accounts stay local.',
       'toggle.switch': 'Toggle SPARK SIGHT plotting mode',
       'login.title': 'Sign in to SPARK SIGHT',
-      'login.subtitle': 'Your account and data stay on this computer',
+      'login.subtitle': 'Use your website account. Projects, chat and API settings stay on this computer.',
       'login.tab.login': 'Sign in',
       'login.tab.register': 'Create account',
+      'login.websiteRegister': 'Register on website',
+      'login.localSubtitle': 'Local offline mode: accounts and plotting data stay on this computer',
       'login.username': 'Username',
       'login.username.hint': '6+ characters: letters, digits, dot, underscore or hyphen',
       'login.password': 'Password',
@@ -249,7 +253,7 @@ window.__ModuleLoader__.load({
       'task.polling': 'Polling task state',
       'task.error': 'Task error',
       'task.login': 'Sign in to view plotting tasks',
-      'task.login.desc': 'SPARK SIGHT needs a local account. Model tools and this tab share the same local session after sign-in.',
+      'task.login.desc': 'Sign in with your SPARK SIGHT website account. Tools and this tab share a local session; plot data stays local.',
       'task.open.workbench': 'Open in the full workbench',
       'settings.tab.task': 'Task',
       'settings.tab.settings': 'Settings',
@@ -379,6 +383,8 @@ window.__ModuleLoader__.load({
             loginRequired: data.loginRequired !== false,
             webStage: Boolean(data.webStage),
             version: data.version ?? '',
+            authMode: data.authMode ?? 'local',
+            accountOrigin: data.accountOrigin ?? '',
             error: null,
             expired: Boolean(data.expired),
             features: data.features,
@@ -577,6 +583,8 @@ window.__ModuleLoader__.load({
     // ---------------------------------------------------------------------
 
     function LoginDialog({ open, onClose, onAuthenticated, reason }) {
+      const auth = useAuth()
+      const cloudMode = auth.authMode === 'cloud'
       const [mode, setMode] = useState('login')
       const [username, setUsername] = useState('')
       const [password, setPassword] = useState('')
@@ -649,15 +657,15 @@ window.__ModuleLoader__.load({
         className: 'ss-modal-backdrop',
         onMouseDown: (event) => { if (event.target === event.currentTarget) onClose() },
       },
-        h('div', { className: 'ss-modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': t('login.title') },
+        h('div', { className: 'ss-modal', 'data-ss-theme': (() => { try { const rgb = getComputedStyle(document.body).color.match(/[\d.]+/g)?.slice(0, 3).map(Number); return rgb && rgb[0] * .2126 + rgb[1] * .7152 + rgb[2] * .0722 > 160 ? 'dark' : 'light' } catch { return 'light' } })(), role: 'dialog', 'aria-modal': 'true', 'aria-label': t('login.title') },
           h('div', { className: 'ss-modal-head' },
             h('div', { className: 'ss-brand' }, h(SparkGlyph, { size: 20 }), h('div', null,
               h('strong', null, t('login.title')),
-              h('span', null, reason || t('login.subtitle')))),
+              h('span', null, cloudMode ? t('login.subtitle') : t('login.localSubtitle')))),
             h('button', { type: 'button', className: 'ss-icon-btn', onClick: onClose, 'aria-label': t('login.close') }, h(Icon, { name: 'close' }))),
           h('div', { className: 'ss-segmented' },
             h('button', { type: 'button', className: mode === 'login' ? 'is-active' : '', onClick: () => { setMode('login'); setError('') } }, t('login.tab.login')),
-            h('button', { type: 'button', className: mode === 'register' ? 'is-active' : '', onClick: () => { setMode('register'); setError('') } }, t('login.tab.register'))),
+            h('button', { type: 'button', className: mode === 'register' ? 'is-active' : '', onClick: () => { if (cloudMode) { window.open(auth.accountOrigin + '/#/login?mode=register', '_blank', 'noopener,noreferrer'); return } setMode('register'); setError('') } }, t(cloudMode ? 'login.websiteRegister' : 'login.tab.register'))),
           h('div', { className: 'ss-form', onKeyDown },
             h('label', { className: 'ss-field' },
               h('span', null, t('login.username')),
@@ -690,8 +698,8 @@ window.__ModuleLoader__.load({
               busy === mode ? t('login.busy') : mode === 'register' ? t('login.register') : t('login.submit'))),
           h('div', { className: 'ss-divider' }, h('span', null, t('login.or'))),
           h('div', { className: 'ss-modal-actions' },
-            h('button', { type: 'button', className: 'ss-secondary ss-block', disabled: Boolean(busy), onClick: () => quick('local-admin') },
-              busy === 'local-admin' ? h(Spinner, { size: 13 }) : null, t('login.localAdmin')),
+            !cloudMode ? h('button', { type: 'button', className: 'ss-secondary ss-block', disabled: Boolean(busy), onClick: () => quick('local-admin') },
+              busy === 'local-admin' ? h(Spinner, { size: 13 }) : null, t('login.localAdmin')) : null,
             h('button', { type: 'button', className: 'ss-ghost ss-block', disabled: Boolean(busy), onClick: () => quick('anonymous') },
               busy === 'anonymous' ? h(Spinner, { size: 13 }) : null, t('login.guest')),
             h('p', { className: 'ss-fineprint' }, t('login.guest.hint')))))
@@ -1564,6 +1572,10 @@ window.__ModuleLoader__.load({
       .ss-toggle.is-on .ss-switch-knob { transform:translateX(11px); }
       .ss-modal-backdrop { position:fixed; inset:0; z-index:9999; background:rgba(9,20,30,.48); display:flex; align-items:center; justify-content:center; padding:18px; }
       .ss-modal { width:min(400px, 96vw); background:${TOKENS.bg}; color:${TOKENS.text}; border-radius:14px; box-shadow:0 22px 70px rgba(0,0,0,.28); border:1px solid ${TOKENS.border}; overflow:hidden; }
+      /* The dialog is portaled to body; isolate it from transparent host theme tokens. */
+      .ss-modal { --dsw-alias-bg-base:#fff; --dsw-alias-bg-module-platform:#f3f6f8; --dsw-alias-label-primary:#18324b; --dsw-alias-label-secondary:#536575; --dsw-alias-label-tertiary:#647688; --dsw-alias-label-caption:#647688; --dsw-alias-border-l2:#d0dbe3; --dsw-alias-border-l1:#e2e9ee; --dsw-alias-state-error-primary:#b42318; --dsw-alias-interactive-bg-hover:rgba(24,50,75,.06); --dsw-alias-interactive-bg-hover-solid:#e7edf2; background-color:#fff; opacity:1; isolation:isolate; box-sizing:border-box; max-height:calc(100dvh - 36px); overflow-y:auto; }
+      .ss-modal * { box-sizing:border-box; }
+      .ss-modal[data-ss-theme="dark"] { --dsw-alias-bg-base:#18232e; --dsw-alias-bg-module-platform:#243442; --dsw-alias-label-primary:#f3f6f9; --dsw-alias-label-secondary:#c7d2dd; --dsw-alias-label-tertiary:#acbccb; --dsw-alias-label-caption:#acbccb; --dsw-alias-border-l2:#526578; --dsw-alias-border-l1:#3b4e60; --dsw-alias-state-error-primary:#ffaca5; --dsw-alias-interactive-bg-hover:rgba(255,255,255,.08); --dsw-alias-interactive-bg-hover-solid:#35495c; background-color:#18232e; }
       .ss-modal-head { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; padding:16px 16px 10px; }
       .ss-brand { display:flex; align-items:flex-start; gap:9px; }
       .ss-brand > div { display:flex; flex-direction:column; gap:3px; }

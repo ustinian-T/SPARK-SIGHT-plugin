@@ -161,3 +161,11 @@ node --test apps/dsh/*.test.js
 
 The manual smoke scripts used during integration live outside the package and
 are not required at runtime.
+
+## 0.5.2 云账号登录与弹窗修复
+
+官方发布包默认使用官网已有账号登录，不需要重新创建本机账号。仅账号验证和明确选择的用户偏好访问账号服务，项目、聊天、上传文件、生成图表及模型 API Key 继续保存在本机。注册入口打开官网注册页；访客入口明确为本地访客。
+
+发布包通过 `resources/release-config.json` 指定账号、网站和更新 HTTPS origin。构建前可在仓库根目录 `.release-config.local` 设置 `accountOrigin`、`websiteOrigin`、`updateOrigin`。配置只接受这三个公开地址字段，禁止放入密码或 API Key。`cloudAccountUrl` 或 `DEEP_IMAGING_ACCOUNT_URL` 可覆盖账号地址；仅显式设置 `cloudAccountUrl: ''` 时使用本地离线账号模式。未配置的源码构建会给出明确提示，避免静默连接另一套账号库。
+
+登录框采用独立的不透明亮/暗色表面，避免宿主透明背景变量导致内容透出。更新插件后刷新绘图页面或重新打开 Harness，使新客户端代码加载。

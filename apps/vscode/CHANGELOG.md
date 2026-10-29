@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.8 — 2026-10-29
+
+- Validate the cloud-account origin before launching the bundled Agent; unconfigured source builds now explain how to install/configure the official extension.
+- Refresh the installed extension and verify login/reload using an existing server account.
+
+
 ## 0.1.7 — 2026-10-29
 
 - Sync the workbench and Agent with upstream 5bd0553: chart-shape fallbacks, statistical gates, grouped candidate selection, title safety and heatmap palettes.

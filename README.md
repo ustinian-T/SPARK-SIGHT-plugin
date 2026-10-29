@@ -454,3 +454,8 @@ Python/matplotlib、R、MATLAB、Node.js 与云模型服务**均不随本仓库�
 ## 2026-10-29 更新
 
 VS Code 0.1.7 与 DSH 0.5.1 同步当前共享工作台及 Agent，覆盖图型规划、统计门槛、标题与热力图配色修复。详见 [发布说明](docs/releases/2026-10-29.md)。
+
+
+## 插件账号登录修复
+
+DSH 0.5.2 与 VS Code 0.1.8 修复账号服务配置与安装版本问题，并修复 DSH 透明登录框；详见 [发布说明](docs/releases/2026-10-29-account-fix.md)。

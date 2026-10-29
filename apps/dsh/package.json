@@ -1,6 +1,6 @@
 {
   "name": "sparksight-dsh",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "SPARK SIGHT for DeepSeek Harness: research plotting inside the agent harness",
   "type": "module",
   "main": "./index.js",

@@ -19,6 +19,7 @@ import { dirname, join, delimiter } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import http from 'node:http'
 import { resolvePersistentDataDir } from './paths.js'
+import { accountServiceOrigin } from './release-config.js'
 
 const HERE = dirname(fileURLToPath(import.meta.url))        // apps/dsh/lib
 const PACKAGE_DIR = dirname(HERE)                           // apps/dsh
@@ -61,6 +62,8 @@ export class SidecarManager {
     this.config = config
     this.log = log
   }
+
+  get accountOrigin() { return accountServiceOrigin(this.config) }
 
   /**
    * Locate the local-agent directory.
@@ -115,9 +118,9 @@ export class SidecarManager {
     env.LOCAL_AGENT_PERSIST = '1'
     env.LOCAL_AGENT_CLOUD_URL = ''
     env.LOCAL_AGENT_CLOUD_TOKEN = ''
-    // Fully local by default: accounts, sessions and plotting data stay on this
-    // machine. Set config.cloudAccountUrl explicitly to opt into a cloud account.
-    env.LOCAL_AGENT_CLOUD_ACCOUNT_URL = String(this.config.cloudAccountUrl || process.env.DEEP_IMAGING_ACCOUNT_URL || '')
+    // Only identity/profile requests go to the configured account service.
+    // Plots, chat, projects and model credentials remain local.
+    env.LOCAL_AGENT_CLOUD_ACCOUNT_URL = accountServiceOrigin(this.config)
     // A stable signing secret keeps the plugin's saved login valid across
     // sidecar/DSH restarts. It lives in the persistent data directory (0600).
     if (this.config.authSecret) env.LOCAL_AGENT_AUTH_SECRET = String(this.config.authSecret)

@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { validateReleaseConfig } from '../lib/release-config.js'
 
 const script = fileURLToPath(import.meta.url)
 const repository = path.resolve(path.dirname(script), '..', '..', '..')
@@ -27,6 +28,9 @@ export function prepareDsh({ repoRoot = repository, bundleWindowsRuntime = proce
   // Only generated package resources are refreshed; application data lives elsewhere.
   fs.rmSync(resources, { recursive: true, force: true })
   fs.mkdirSync(resources, { recursive: true })
+  const releaseSource = path.join(root, '.release-config.local')
+  const release = validateReleaseConfig(fs.existsSync(releaseSource) ? JSON.parse(fs.readFileSync(releaseSource, 'utf8').replace(/^\uFEFF/, '')) : {})
+  fs.writeFileSync(path.join(resources, 'release-config.json'), JSON.stringify(release, null, 2) + '\n')
   copyTree(path.join(agent, 'src'), path.join(resources, 'agent', 'src'), (entry) => /\.(?:js|json|otf|ttf|txt|md|conf)$/i.test(entry))
   fs.copyFileSync(path.join(agent, 'package.json'), path.join(resources, 'agent', 'package.json'))
   copyTree(web, path.join(resources, 'web', 'dist'))

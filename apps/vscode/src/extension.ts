@@ -6,7 +6,7 @@ import * as path from 'node:path'
 import { handleHostMessage } from './hostBridge'
 import { applyPatchWithReview, type VscodeFacade } from './patchReview'
 import { RuntimeRunner } from './runtimeRunner'
-import { loadReleaseConfig } from './releaseConfig'
+import { loadReleaseConfig, accountServiceOrigin } from './releaseConfig'
 import { sourceDocument } from './nativeSource'
 import { checkUpdate, trustedDownload, verifyArtifact, ARTIFACT_NAME } from './updater'
 
@@ -110,7 +110,7 @@ async function launchAgent(context: vscode.ExtensionContext) {
       ...(bundled ? { PATH: [path.join(runtimeRoot, 'python'), path.join(runtimeRoot, 'node'), process.env.PATH ?? ''].join(path.delimiter) } : {}),
       LOCAL_AGENT_HOST: '127.0.0.1', LOCAL_AGENT_PORT: '0', LOCAL_AGENT_TOKEN: token,
       LOCAL_AGENT_PERSIST: '1', LOCAL_ONLY_MODE: '1', REMOTE_MODE: '0', TEST_WEB_MODE: '0', LOCAL_AGENT_WEB_ONLY: '0', LOCAL_AGENT_CLOUD_URL: '', LOCAL_AGENT_CLOUD_TOKEN: '',
-      LOCAL_AGENT_CLOUD_ACCOUNT_URL: process.env.DEEP_IMAGING_ACCOUNT_URL || loadReleaseConfig().accountOrigin,
+      LOCAL_AGENT_CLOUD_ACCOUNT_URL: accountServiceOrigin(),
       LOCAL_AGENT_DATA_DIR: path.join(context.globalStorageUri.fsPath, 'agent-data') }
   })
   agentChild = child

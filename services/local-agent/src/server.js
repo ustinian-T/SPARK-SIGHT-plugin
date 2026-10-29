@@ -240,7 +240,7 @@ export function createServer(options = {}) {
 
   // 初始管理员引导：绝不使用跨安装实例共享的默认密码。
   if (!identityStore.state.users.some((user) => user.role === 'admin')) {
-    const adminUsername = String(process.env.LOCAL_AGENT_ADMIN_USERNAME ?? 'redacted').trim().toLowerCase()
+    const adminUsername = String(process.env.LOCAL_AGENT_ADMIN_USERNAME ?? 'admin').trim().toLowerCase()
     const configuredPassword = process.env.LOCAL_AGENT_ADMIN_PASSWORD
     const adminPassword = configuredPassword ?? randomBytes(24).toString('base64url')
     try {

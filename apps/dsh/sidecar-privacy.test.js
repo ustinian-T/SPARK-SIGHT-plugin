@@ -10,7 +10,7 @@ test('DSH sidecar ignores inherited host and token configuration', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'spark-dsh-private-'))
   const previous = { LOCAL_AGENT_HOST: process.env.LOCAL_AGENT_HOST, LOCAL_AGENT_TOKEN: process.env.LOCAL_AGENT_TOKEN, LOCAL_AGENT_PORT: process.env.LOCAL_AGENT_PORT }
   Object.assign(process.env, { LOCAL_AGENT_HOST: '0.0.0.0', LOCAL_AGENT_TOKEN: 'inherited-fixture-token', LOCAL_AGENT_PORT: '0' })
-  const manager = new SidecarManager({ config: { dataDir: root, agentDir: fileURLToPath(new URL('../../services/local-agent', import.meta.url)) } })
+  const manager = new SidecarManager({ config: { dataDir: root, cloudAccountUrl: '', agentDir: fileURLToPath(new URL('../../services/local-agent', import.meta.url)) } })
   try {
     const endpoint = await manager.start()
     assert.notEqual(endpoint.token, 'inherited-fixture-token')

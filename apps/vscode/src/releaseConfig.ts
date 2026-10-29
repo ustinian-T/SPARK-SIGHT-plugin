@@ -20,3 +20,10 @@ export function loadReleaseConfig(): ReleaseConfig {
   const file = path.join(__dirname, '..', 'release-config.json')
   return validateReleaseConfig(fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {})
 }
+
+/** Fail explicitly for unconfigured source builds; never silently use a local account database. */
+export function accountServiceOrigin(override = process.env.DEEP_IMAGING_ACCOUNT_URL, release = loadReleaseConfig()): string {
+  const origin = validateReleaseConfig({ accountOrigin: override || release.accountOrigin }).accountOrigin
+  if (origin === 'https://account.example.com') throw new Error('扩展未配置账号服务，请安装官网发布的 VSIX 或配置 DEEP_IMAGING_ACCOUNT_URL')
+  return origin
+}
