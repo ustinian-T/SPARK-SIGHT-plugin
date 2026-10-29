@@ -174,3 +174,22 @@ test('specPython 科研排版：约束布局自动预留总标题区、白底导
   assert.match(code, /"figure.facecolor": "#FFFFFF"/)
   assert.match(code, /"axes.titlesize": 15/)
 })
+
+
+test('waterfall cumulative markers align with increment endpoints and fit inside the axes', async () => {
+  const { runInSandbox } = await import('../src/sandbox.js')
+  const fs = await import('node:fs')
+  const os = await import('node:os')
+  const path = await import('node:path')
+  const workdir = fs.mkdtempSync(path.join(os.tmpdir(), 'waterfall-numeric-'))
+  try {
+    const code = generateCodeForSpec(spec('waterfall'), input(['increment'])).python + `
+ax = axes.flat[0]
+np.testing.assert_allclose(ax.lines[0].get_xdata(), [0, 1, 2, 3, 4, 5])
+np.testing.assert_allclose(ax.lines[0].get_ydata(), [100, 82, 108, 99, 121, 121])
+assert ax.get_ylim()[0] < 0 and ax.get_ylim()[1] > 121
+`
+    const result = await runInSandbox({ workdir, engine: 'python', code, csvName: 'demo.csv', csvBuffer: Buffer.from('week,increment\nStart,100\nCost,-18\nOptimization,26\nLoss,-9\nPremium,22\nEnd,0\n'), expected: ['chart_spec.svg', 'chart_spec.png'] })
+    assert.equal(result.status, 'success', result.stderr)
+  } finally { await fs.promises.rm(workdir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }) }
+})

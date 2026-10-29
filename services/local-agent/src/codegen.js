@@ -567,7 +567,10 @@ _wf_bottom = _wf_cum[:-1].copy()
 _wf_height = _wf_vals.copy()
 _wf_colors = [('#2A9D8F' if _v >= 0 else '#E76F51') for _v in _wf_vals]
 ${ax}.bar(range(len(_wf_vals)), _wf_height, bottom=_wf_bottom, color=_wf_colors, edgecolor='white', linewidth=0.6)
-${ax}.plot(range(len(_wf_cum)), _wf_cum, color='#334155', linewidth=1.0, marker='o', markersize=3)
+${ax}.plot(range(len(_wf_vals)), _wf_cum[1:], color='#334155', linewidth=1.0, marker='o', markersize=3)
+_wf_lo, _wf_hi = float(np.min(_wf_cum)), float(np.max(_wf_cum))
+_wf_pad = max((_wf_hi - _wf_lo) * 0.1, 1.0)
+${ax}.set_ylim(_wf_lo - _wf_pad, _wf_hi + _wf_pad)
 ${ax}.set_xticks(range(len(_wf_vals)), _wf[x_col].astype(str), rotation=30, ha='right')
 ${ax}.set_ylabel(measures[0]); ${ax}.axhline(0, color='#64748B', linewidth=0.8)`
     }
