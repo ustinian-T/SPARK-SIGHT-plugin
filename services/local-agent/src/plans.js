@@ -369,6 +369,7 @@ export function buildPlans(analysis, opts) {
   const { summary, evidence, claims } = analysis
   const { fileName, titleBase, engine = 'python', executed = false, userRequest = '', preferenceEvents = [], clarification = null, userProfile = null, taskSpec = null } = opts
   const requestedChartType = normalizeRequestedChartType(opts.requestedChartType)
+    ?? ((!clarification?.chartType || clarification.chartType === 'auto') ? normalizeRequestedChartType(userRequest) : null)
   const effectiveClarification = requestedChartType ? { ...(clarification ?? {}), chartType: requestedChartType } : clarification
   const requestedXField = taskSpec?.fieldSlots?.xField ?? null
   const requestedYField = taskSpec?.fieldSlots?.yField ?? null
@@ -424,14 +425,19 @@ export function buildPlans(analysis, opts) {
   const explicit3dReady = explicit3d && Number(analysis.chartContext?.numericMeasureCount ?? 0) >= 3
   const candidateAnalysis = explicit3dReady
     ? { ...analysis, chartContext: { ...analysis.chartContext, spatialReady: true, spatialDiagnostics: { ...(analysis.chartContext?.spatialDiagnostics ?? {}), source: 'explicit_user_request', requiredNumericFields: 3 } } }
-    : analysis
+    : { ...analysis, chartContext: { ...analysis.chartContext, requestedChartType: effectiveClarification?.chartType } }
   // 长表/时间×分组数据的 summary.series 是“组均值系列”，标签不是原始数值列。
   // 热力图需要至少两个真实数值字段；若直接把组标签传入 codegen，会在真实执行阶段
   // 才触发 HEATMAP_REQUIRES_TWO_NUMERIC_MEASURES。规划阶段提前排除该候选，改由
   // 散点、双 Y 轴或分布图承担多变量表达，避免把可预见的数据形态错误暴露给用户。
-  const pool = buildCandidatePool(candidateAnalysis).filter((candidate) =>
-    !(candidate.chartType === 'correlation_heatmap' && (summary.groups || summary.timeGrouped))
-  )
+  const pool = buildCandidatePool(candidateAnalysis).filter((candidate) => {
+    if (candidate.chartType === 'correlation_heatmap' && (summary.groups || summary.timeGrouped)) return false
+    // Numeric source fields include the x coordinate; code generation consumes only
+    // selected measures. Filter against that same input before choosing candidates.
+    const required = ['surface3d', 'scatter3d', 'cone3d', 'line3d', 'filled_line3d'].includes(candidate.chartType) ? 3
+      : ['bubble', 'dual_axis', 'paired_dot', 'stacked_area', 'correlation_heatmap'].includes(candidate.chartType) ? 2 : 1
+    return measures.length >= required
+  })
   // An explicit plot family is a constraint, not a preference competing with MMR.
   // Three alternatives vary presentation while preserving the requested marks.
   const explicitBar = /(?:分组|簇状|柱状|柱形|条形)图|grouped\s*bar|bar\s*(?:chart|plot)/i.test(userRequest)
@@ -463,9 +469,9 @@ export function buildPlans(analysis, opts) {
         annotation: { kinds: ['grid'], count: 1 }
       },
       density: {
-        layout: { rows: 1, cols: 2, panels: 2 },
-        encoding: { ...base.encoding, marks, normalized: true },
-        statPresentation: { ...base.statPresentation, raw: true, normalized: true },
+        layout: { ...(base.layout ?? { rows: 1, cols: 1, panels: 1 }) },
+        encoding: { ...base.encoding, marks },
+        statPresentation: { ...base.statPresentation, raw: true },
         color: { mode: 'sequential', monochromePrint: false },
         annotation: { kinds: ['sample_size'], count: 1 }
       }

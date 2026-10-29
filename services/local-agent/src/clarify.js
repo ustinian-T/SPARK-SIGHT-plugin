@@ -44,7 +44,7 @@ export function chartTypeQuestion(ctx = {}) {
       : '检测到可能的三维坐标字段；曲面图还要求坐标覆盖足够且可插值的空间网格，稀疏/非空间数据建议散点或二维分布图。'
   return {
     question: '第 2/3 轮 · 图型偏好：倾向使用哪种图型？（可选：热力图、双Y轴图、三维曲面图、三维散点图，或常规折线/柱状/散点/箱线）',
-    options: ['自动选择（推荐）', '分组柱状图（均值+误差棒）', '趋势与不确定性（折线+误差棒）', '分布与离群值（箱线+散点/小提琴）', '效应量与置信区间（森林图）', '相关结构（热力图）', '双Y轴图', '三维曲面图', '三维散点图', '三维折线图', '三维填充折线图'],
+    options: ['自动选择（推荐）', '分组柱状图（均值+误差棒）', '趋势与不确定性（折线+误差棒）', '分布与离群值（箱线+散点/小提琴）', '效应量与置信区间（森林图）', '相关结构（热力图）', '双Y轴图', '三维曲面图', '三维散点图', '三维折线图', '三维填充折线图', '贡献瀑布图', '排名棒棒糖图', '气泡图', '三维锥状图'],
     hint: `回答“自动/默认”按数据结构推荐并说明依据；${suitabilityHint} 常见选择：趋势/时序用折线+误差棒，分布比较用箱线+原始散点或小提琴，效应量及置信区间用森林图；热力图/双Y轴需≥2个数值列。`
   }
 }
@@ -138,6 +138,7 @@ export function parseChartType(answer) {
   if (/分组柱状|簇状柱|grouped[ _-]?bar/i.test(a)) return { chartType: 'grouped_bar' }
   if (/双.?y|双轴|双纵轴|twin/i.test(a)) return { chartType: 'dual_axis' }
   if (/三维曲面|3d曲面|曲面|surf/i.test(a)) return { chartType: 'surface3d' }
+  if (/三维锥|锥状|cone3d/i.test(a)) return { chartType: 'cone3d' }
   if (/三维散点|3d散点|三维点|scatter3/i.test(a)) return { chartType: 'scatter3d' }
   if (/三维填充折线|3d填充折线|filled.?line3/i.test(a)) return { chartType: 'filled_line3d' }
   if (/三维折线|3d折线|line3/i.test(a)) return { chartType: 'line3d' }
@@ -289,6 +290,10 @@ export function mergePrefill(prefill = {}) {
 export async function runClarification(task, opts = {}) {
   const { ask, prefill, decorate, context = {} } = opts
   const merged = mergePrefill({ ...profileClarificationDefaults(context.userProfile), ...prefill })
+  // Resolved field roles can skip a question, but must never discard the user's plot family.
+  if (!merged.chartType || merged.chartType === 'auto') {
+    merged.chartType = parseChartType(context.intentSpec?.rawRequest ?? task.prompt ?? '').chartType
+  }
   const answers = [...(merged.answers ?? [])]
   const skipped = new Set(merged.prefillRounds ?? [])
   if (context.userProfile?.clarificationMode === 'minimal') { skipped.add(2); skipped.add(3) }

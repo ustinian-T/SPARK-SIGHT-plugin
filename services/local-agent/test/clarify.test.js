@@ -305,3 +305,28 @@ test('三维图澄清支持二次处理选择并保留原始默认', () => {
   assert.equal(parsePresentation('二次处理=聚类分层').secondaryProcessing, 'cluster')
   assert.equal(defaultClarification().secondaryProcessing, 'raw')
 })
+
+
+test('resolved field roles retain explicitly requested chart type when adaptive clarification skips questions', async () => {
+  for (const [request, expected] of [['使用贡献瀑布图展示增量贡献', 'waterfall'], ['使用三维曲面图展示空间响应', 'surface3d'], ['使用棒棒糖图展示排名', 'lollipop']]) {
+    const rounds = []
+    const result = await runClarification({ prompt: request }, {
+      context: { intentSpec: { rawRequest: request, pendingFields: [] }, userProfile: {} },
+      ask: async (round) => { rounds.push(round); return '全部按科研默认' }
+    })
+    assert.equal(result.chartType, expected)
+    assert.deepEqual(rounds, [3])
+  }
+})
+
+test('chart choices expose supported waterfall, lollipop, bubble and cone charts', () => {
+  for (const label of ['瀑布', '棒棒糖', '气泡', '锥状']) assert.ok(chartTypeQuestion().options.some(option => option.includes(label)), label)
+})
+
+test('buildPlans preserves explicit prompt chart types even without interactive clarification', () => {
+  const data = '阶段,增量,累计值\n基线,100,100\n成本,-18,82\n优化,26,108\n终值,0,108\n'
+  const ingest = ingestFile('contribution.csv', Buffer.from(data))
+  const a = runDeterministicAnalysis({ profile: ingest.profile, text: ingest.text, rawDelimiter: ingest.rawDelimiter, fileName: 'contribution.csv' })
+  const plans = buildPlans(a, { fileName: 'contribution.csv', titleBase: 'Contribution', userRequest: '展示贡献瀑布图', clarification: { chartType: 'auto' } })
+  assert.ok(plans.every(plan => plan.spec.panels.every(panel => panel.layers.every(layer => layer.kind === 'waterfall'))))
+})

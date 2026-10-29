@@ -63,7 +63,7 @@ export function StatusBar() {
         <span className="statusbar__item">
           {runLabel}
         </span>
-        <span className="statusbar__item mono">v{task?.execution.version ?? 0}</span>
+        <span className="statusbar__item mono" title="当前绘图任务的修订次数，不是软件发布版本">任务修订 {task?.execution.version ?? '—'}</span>
         <button className="icon-btn" style={{ width: 28, height: 22 }} title="运行日志控制台" aria-label="运行日志控制台" onClick={() => toggleConsole()}>
           <Icon name="terminal" size={14} />
         </button>

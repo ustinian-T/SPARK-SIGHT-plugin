@@ -267,7 +267,7 @@ export function buildCandidatePool(analysis) {
       candidateId: 'c_clarity_lollipop',
       strategy: 'clarity',
       chartType: 'lollipop',
-      condition: sig.rankLike,
+      condition: sig.rankLike || analysis.chartContext?.requestedChartType === 'lollipop',
       features: {
         chartType: 'lollipop',
         layout: { rows: 1, cols: 1, panels: 1 },
@@ -284,7 +284,7 @@ export function buildCandidatePool(analysis) {
       candidateId: 'c_clarity_waterfall',
       strategy: 'clarity',
       chartType: 'waterfall',
-      condition: sig.waterfallLike,
+      condition: sig.waterfallLike || analysis.chartContext?.requestedChartType === 'waterfall',
       features: {
         chartType: 'waterfall',
         layout: { rows: 1, cols: 1, panels: 1 },
