@@ -1,3 +1,4 @@
+import { PY_FINAL_LAYOUT } from './plotLayout.js'
 // 引擎适配层：依据真实字段生成 Python / R / MATLAB 三引擎源码（确定性模板，供沙箱执行）。
 // 设计要点：
 //  - Python 代码统一注入 Agg 后端与 CJK 字体自动探测（RENDER 类问题前置规避）；
@@ -56,7 +57,9 @@ def _setup_cjk_font():
 _setup_cjk_font()
 def _fit_title(s, max_chars=24):
     import textwrap
-    return "\\n".join(textwrap.wrap(s, max_chars)) if len(s) > max_chars else s
+    lines = max(1, (len(s) + max_chars - 1) // max_chars)
+    width = (len(s) + lines - 1) // lines
+    return "\\n".join(textwrap.wrap(s, width)) if len(s) > max_chars else s
 # 科研规则 §4.3 字号体系：标题 15 加粗 / 轴标签 12.5 / 刻度 10.5 / 图例 10.5（任何文字 ≥10pt）；§4.1 三层纯白底
 plt.rcParams.update({
     "font.size": 11,
@@ -70,6 +73,7 @@ plt.rcParams.update({
     "axes.facecolor": "white",
     "savefig.facecolor": "white"
 })
+${PY_FINAL_LAYOUT}
 `
 const PY_PREAMBLE = `import numpy as np
 ${PY_PLOT_SETUP}`
@@ -823,6 +827,8 @@ ${ax}.legend(frameon=False, fontsize=${Number(f.legendSize ?? 11)})`)
       lines.push(`ax.set_title(_fit_title(${pyQ(title)}), color=${pyQ(f.titleColor ?? '#000000')}, fontsize=${Number(f.titleFontSize ?? 15)}, pad=14)`)
     }
     const legend = spec.panels[index].legend
+    lines.push(`ax._deep_legend_position = ${pyQ(legend?.userSpecified ? legend.position : 'right')}`)
+    if (legend?.visible === false) lines.push('if ax.get_legend() is not None: ax.get_legend().remove()')
     const locations = { right: 'loc="center left", bbox_to_anchor=(1.02, 0.5)', top: 'loc="lower center", bbox_to_anchor=(0.5, 1.02)', bottom: 'loc="upper center", bbox_to_anchor=(0.5, -0.2)', inside: 'loc="upper right"' }
     if (legend?.visible !== false && (legend?.userSpecified || f.labelLanguage && f.labelLanguage !== 'auto') && locations[legend?.position]) {
       lines.push('_handles, _labels = ax.get_legend_handles_labels()')
@@ -857,15 +863,18 @@ colors = ${colors}
 plt.rcParams.update({
     ${rcLines}
 })
+_requested_font = ${pyQ(f.fontFamily ?? 'SimHei')}
+if _requested_font not in {font.name for font in _fm.fontManager.ttflist} and _requested_font not in ("serif", "sans-serif", "monospace"):
+    plt.rcParams["font.family"] = [plt.rcParams["font.sans-serif"][0], "DejaVu Sans"]
+    print("WARNING PLOT_FONT_FALLBACK: 请求字体在当前环境不可用，已使用打包的中文字体。")
 fig, axes = plt.subplots(${rows}, ${cols}, squeeze=False, figsize=(${figureWidth}, ${Math.max(4.8, rows * 3.8)}), dpi=${c.dpi ?? 160}, layout="constrained")
 ${statements}
 panel_titles = ${pyList(titles)}
 ${loopBody}
 for _i in range(len(panel_titles), len(axes.flat)):
     axes.flat[_i].set_visible(False)
-fig.suptitle(_fit_title(${pyQ(spec.figure.title ?? c.title)}), y=0.98, color=${pyQ(f.titleColor ?? '#000000')}, fontsize=${Number(f.titleFontSize ?? 15)}, fontweight=${f.titleFontWeight === 'normal' ? '"normal"' : '"bold"'})
-fig.set_constrained_layout(False)
-fig.subplots_adjust(top=0.86, bottom=0.30, left=0.10, right=0.90, wspace=0.28, hspace=0.32)
+fig.suptitle(_fit_title(${pyQ(spec.figure.title ?? c.title)}), color=${pyQ(f.titleColor ?? '#000000')}, fontsize=${Number(f.titleFontSize ?? 15)}, fontweight=${f.titleFontWeight === 'normal' ? '"normal"' : '"bold"'})
+_finalize_plot_layout(fig)
 ${''} # 图注由结果分析区展示，不叠加到图内
 fig.savefig(${pyQ(`${outputBase}.png`)}, dpi=${c.dpi ?? 160}, facecolor="white")
 fig.savefig(${pyQ(`${outputBase}.svg`)}, facecolor="white")
@@ -882,7 +891,7 @@ function specR(spec, c, outputBase) {
     const panel = spec.panels[index]
     if (kind === 'bar') {
       if (panel.groups) return groupedR(panel, 'bar')
-      return `bar_pos <- barplot(t(as.matrix(df[measures])), beside = TRUE, names.arg = df[[x_col]],
+      return `bar_pos <- barplot(t(as.matrix(df[measures])), beside = TRUE, names.arg = ._wrap_plot_labels(df[[x_col]], 8),
   col = c(${(c.colors?.length ? c.colors : NATURE_COLORS).map(rQ).join(', ')}), legend.text = measures, args.legend = list(x = "topright", bty = "n"),
   xlab = ${rQ(c.xLabel ?? c.x)}, ylab = ${rQ(c.yLabel)}, las = 2)
 for (mi in seq_along(measures)) {
@@ -1034,10 +1043,10 @@ print(p)`
       : `matplot(df[[x_col]], df[measures], type = "o", pch = 1, lty = 1, xlab = ${rQ(panel.scales?.find(scale => scale.axis === 'x')?.label ?? c.xLabel ?? c.x)}, ylab = ${rQ(panel.scales?.find(scale => scale.axis === 'y')?.label ?? c.yLabel)})`)
   }).map((source, index) => {
     const panel = spec.panels[index]
-    const position = panel.legend?.userSpecified ? panel.legend.position : null
+    const position = panel.legend?.userSpecified ? panel.legend.position : 'right'
     const language = spec.figure.labelLanguage
     if (!position && (!language || language === 'auto')) return source
-    const labels = (panel.layers ?? []).map(layer => layer.label)
+    const labels = (panel.layers ?? []).map(layer => layer.label).filter(Boolean)
     if (source.includes('print(p)')) {
       const ggPosition = position === 'inside' ? 'c(0.85, 0.85)' : rQ(position ?? 'top')
       return source.replaceAll('print(p)', `print(p + labs(title = ${rQ(spec.figure.title ?? c.title)}, x = ${rQ(panel.scales?.find(scale => scale.axis === 'x')?.label ?? c.xLabel ?? c.x)}, y = ${rQ(panel.scales?.find(scale => scale.axis === 'y')?.label ?? c.yLabel)}) + theme(legend.position = ${ggPosition}, text = element_text(family = plot_font), plot.title = element_text(hjust = 0.5)))`)
@@ -1045,14 +1054,18 @@ print(p)`
     if (position && ['bar', 'line', 'stacked'].includes(specKinds(spec)[index])) {
       const basePosition = { right: 'topright', top: 'top', bottom: 'bottom', inside: 'topright' }[position]
       source = source.replace('legend.text = measures', 'legend.text = FALSE')
-      source += `\nlegend(${rQ(basePosition)}, legend = c(${labels.map(rQ).join(', ')}), col = c(${(c.colors?.length ? c.colors : NATURE_COLORS).map(rQ).join(', ')}), lty = 1, bty = "n"${position === 'right' ? ', inset = c(-0.25, 0), xpd = TRUE' : ''})`
+      const legendLabels = `._wrap_plot_labels(c(${(labels.length ? labels : c.measures).map(rQ).join(', ')}))`
+      if (position === 'right') {
+        source = `._legend_labels <- ${legendLabels}\n._mar <- par("mar"); ._mar[4] <- max(4, min(18, max(strwidth(._legend_labels, units = "inches", cex = 0.9)) / par("csi") + 2)); par(mar = ._mar)\n${source}`
+      }
+      source += `\nlegend(${rQ(basePosition)}, legend = ${legendLabels}, col = c(${(c.colors?.length ? c.colors : NATURE_COLORS).map(rQ).join(', ')}), lty = 1, bty = "n", cex = 0.9${position === 'right' ? ', inset = c(-0.03, 0), xpd = NA, xjust = 0' : ''})`
     }
     return source
   }).join('\n')
   const usesGroupPlot = spec.panels.some(panel => panel.groups)
   const draw = usesGroupPlot
     ? plots.replaceAll('print(p)', `print(p + labs(title = ${rQ(spec.figure.title ?? c.title)}) + theme(text = element_text(family = plot_font), plot.title = element_text(hjust = 0.5, face = "bold")))`)
-    : `par(mfrow = c(${rows}, ${cols}), mar = c(5, 4, 3, 1), oma = c(0, 0, 3, 0))\n${plots}\nmtext(${rQ(spec.figure.title ?? c.title)}, side = 3, outer = TRUE, line = 1, cex = 1.2, font = 2)`
+    : `par(mfrow = c(${rows}, ${cols}), mar = c(8, 5, 4, 2), oma = c(0, 0, 3, 0))\n${plots}\nmtext(${rQ(spec.figure.title ?? c.title)}, side = 3, outer = TRUE, line = 1, cex = 1.2, font = 2)`
   return `# ChartSpec-driven R
 library(ggplot2)
 library(dplyr)
@@ -1060,6 +1073,10 @@ df <- read.csv(${rQ(c.fileName)}, check.names = FALSE)
 x_col <- ${rQ(c.x)}
 measures <- ${measures}
 plot_font <- ${fontFamily}
+._wrap_plot_labels <- function(values, width = 14) vapply(as.character(values), function(value) {
+  starts <- seq.int(1L, max(1L, nchar(value)), by = width)
+  paste(substring(value, starts, starts + width - 1L), collapse = "\\n")
+}, character(1))
 if (file.exists(".deep-imaging-fonts/NotoSansCJKsc-Regular.otf") && capabilities("cairo")) {
   font_available <- requireNamespace("systemfonts", quietly = TRUE) &&
     any(tolower(systemfonts::font_info(family = plot_font)$family) == tolower(plot_font))
@@ -1069,10 +1086,10 @@ if (file.exists(".deep-imaging-fonts/NotoSansCJKsc-Regular.otf") && capabilities
 }
 par(family = plot_font)
 if (requireNamespace("ggplot2", quietly = TRUE)) ggplot2::theme_set(ggplot2::theme_gray(base_family = plot_font))
-png(${rQ(`${outputBase}.png`)}, width = ${cols * 1200}, height = ${rows * 900}, res = 180, type = if (capabilities("cairo")) "cairo" else getOption("bitmapType"))
+png(${rQ(`${outputBase}.png`)}, width = ${cols * 1600}, height = ${rows * 1100}, res = 180, type = if (capabilities("cairo")) "cairo" else getOption("bitmapType"))
 ${draw}
 dev.off()
-svg(${rQ(`${outputBase}.svg`)}, width = ${cols * 5}, height = ${rows * 4})
+svg(${rQ(`${outputBase}.svg`)}, width = ${cols * 8.8}, height = ${rows * 6.1})
 ${draw}
 dev.off()
 `
@@ -1240,8 +1257,7 @@ figure('Color','w','Position',[100 100 ${Math.max(800, cols * 520)} ${Math.max(5
 ${plots}
 panelTitles = ${panelTitles};
 ${spec.panels.map((panel, index) => {
-  if (!panel.legend?.userSpecified && (!spec.figure.labelLanguage || spec.figure.labelLanguage === 'auto')) return ''
-  const location = { right: 'eastoutside', top: 'northoutside', bottom: 'southoutside', inside: 'northeast' }[panel.legend?.position]
+  const location = { right: 'eastoutside', top: 'northoutside', bottom: 'southoutside', inside: 'northeast' }[panel.legend?.userSpecified ? panel.legend.position : 'right']
   const labels = (panel.layers ?? []).map(layer => layer.label)
   const kind = specKinds(spec)[index]
   return `nexttile(${index + 1});\n${['bar', 'line'].includes(kind) ? `xlabel(${mQ(panel.scales?.find(scale => scale.axis === 'x')?.label ?? c.xLabel ?? c.x)}); ylabel(${mQ(panel.scales?.find(scale => scale.axis === 'y')?.label ?? c.yLabel)});` : ''}\n${location && ['bar', 'line', 'dual_axis'].includes(kind) ? `legend({${labels.map(mQ).join(', ')}}, 'Location', ${mQ(location)});` : ''}`
@@ -1281,7 +1297,7 @@ export function attachSourceMetadata(code, spec) {
 
 export function generateCode(strategy, input) {
   return {
-    python: pythonCode(strategy, input),
+    python: pythonCode(strategy, input).replace(/(?=^fig.savefig)/m, '_finalize_plot_layout(fig)\n'),
     r: rCode(strategy, input),
     matlab: matlabCode(strategy, input)
   }
@@ -1289,7 +1305,7 @@ export function generateCode(strategy, input) {
 
 // DEPENDENCY 修复模板（无 pandas）
 export function generateFallbackCode(strategy, input) {
-  return pythonFallbackCode(strategy, input)
+  return pythonFallbackCode(strategy, input).replace(/(?=^fig.savefig)/m, '_finalize_plot_layout(fig)\n')
 }
 
 // 各方案/引擎必须产出的文件（沙箱据此回收与判定 RENDER 成败）

@@ -21,7 +21,7 @@ import { createSparksightTools, registerSparksightPrompt } from './lib/tools.js'
 import { resolvePersistentDataDir } from './lib/paths.js'
 import { checkUpdate, downloadUpdate, ARTIFACT_NAME } from './lib/updater.js'
 
-export const VERSION = '0.5.2'
+export const VERSION = '0.5.4'
 const PACKAGE_DIR = dirname(fileURLToPath(import.meta.url))
 const MAX_UPLOAD_BYTES = 64 * 1024 * 1024
 

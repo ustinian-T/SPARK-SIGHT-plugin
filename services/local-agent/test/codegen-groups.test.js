@@ -238,6 +238,6 @@ test('explicit axis display labels keep the original CSV field binding in all cl
 
 test('grouped Python exports reserve rotated tick labels and x-axis title', () => {
  const p = plansFor('group,value\na,1\na,2\nb,4\nb,5\n').find(plan => plan.strategy === 'clarity')
- assert.match(p.code.python, /subplots_adjust\(top=0\.86, bottom=0\.30/)
+ assert.match(p.code.python, /_finalize_plot_layout\(fig\)/)
  assert.match(p.code.python, /groupby\("group", sort=False\)/)
 })
