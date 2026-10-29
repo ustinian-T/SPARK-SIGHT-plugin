@@ -28,7 +28,8 @@ export function buildInterpretation(ctx) {
   const grouped = summary?.groups
 
   // ---------- 1. 趋势（宽表多系列：首末变化 + 末点峰值） ----------
-  if (!grouped && summary?.series?.length) {
+  const matrixLike = !grouped && (summary?.series?.length ?? 0) >= 4 && (summary?.x?.length ?? 0) <= 8
+  if (!grouped && summary?.series?.length && !matrixLike) {
     const trendParts = []
     for (const s of summary.series) {
       const ev = byId.get(`ev_trend_${summary.series.indexOf(s)}`)
@@ -73,6 +74,17 @@ export function buildInterpretation(ctx) {
       trendParts.push(`末点最高为 ${peakEv.value.replace(/（[^）]*）$/, '')}`)
     }
     if (trendParts.length) paragraph.push(`变化趋势显示，${trendParts.join('；')}。`)
+  }
+
+  if (matrixLike) {
+    const finitePairs = (evidence ?? []).filter((e) => e.tool === 'stats.correlation' && e.details?.r !== null)
+    if (finitePairs.length) {
+      const strongest = [...finitePairs].sort((a, b) => Math.abs(b.details.r) - Math.abs(a.details.r))[0]
+      insights.push({ id: 'insight_matrix', kind: 'correlation', title: '相关矩阵结构', text: `该数据呈矩阵型多变量结构；最强线性相关为 ${strongest.fields[0]} 与 ${strongest.fields[1]}（r=${fmt(strongest.details.r, 4)}，n=${strongest.details.n}）。`, evidenceId: strongest.evidence_id })
+      paragraph.push(`相关矩阵显示，多变量之间的线性关联应结合相关系数大小与方向解读；不将矩阵行列顺序解释为时间趋势。`)
+    } else {
+      insights.push({ id: 'insight_matrix_quality', kind: 'quality', title: '矩阵型数据', text: '检测到矩阵型数据，但有效成对相关观测不足，未生成趋势性解读。', evidenceId: 'ev_n' })
+    }
   }
 
   // ---------- 2. 组间比较（ANOVA + 两两 t 检验，Holm 校正） ----------

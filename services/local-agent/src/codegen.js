@@ -479,7 +479,7 @@ export function validateChartSpec(spec, input) {
   if (!spec?.figure || !Array.isArray(spec.panels) || spec.panels.length === 0) {
     throw new Error('INVALID_CHART_SPEC')
   }
-  const supported = new Set(['line', 'bar', 'scatter', 'bubble', 'lollipop', 'heatmap', 'histogram', 'boxplot', 'dual_axis', 'surface3d', 'scatter3d', 'cone3d', 'line3d', 'filled_line3d', 'box_jitter', 'violin', 'dotplot', 'paired', 'stacked', 'forest'])
+  const supported = new Set(['line', 'bar', 'scatter', 'bubble', 'lollipop', 'waterfall', 'heatmap', 'histogram', 'boxplot', 'dual_axis', 'surface3d', 'scatter3d', 'cone3d', 'line3d', 'filled_line3d', 'box_jitter', 'violin', 'dotplot', 'paired', 'stacked', 'forest'])
   const kinds = specKinds(spec)
   const unsupported = kinds.find((kind) => !supported.has(kind))
   if (unsupported) throw new Error(`UNSUPPORTED_CHART_KIND:${unsupported}`)
@@ -494,6 +494,9 @@ export function validateChartSpec(spec, input) {
   }
   if (kinds.some((kind) => ['paired', 'stacked'].includes(kind)) && input.measures.length < 2) {
     throw new Error('PAIRED_STACKED_REQUIRES_TWO_MEASURES')
+  }
+  if (kinds.some((kind) => kind === 'heatmap') && input.measures.length < 2) {
+    throw new Error('HEATMAP_REQUIRES_TWO_NUMERIC_MEASURES')
   }
 }
 
@@ -554,21 +557,47 @@ ${ax}.spines["top"].set_visible(False); ${ax}.spines["right"].set_visible(False)
 ${categoryCol ? `for _cat, _color in _cat_colors.items(): ${ax}.scatter([], [], color=_color, s=70, label=_cat)
 ${ax}.legend(frameon=False, loc="lower right")` : ''}`
     }
+    if (kind === 'waterfall') {
+      return `_wf = df[[x_col, measures[0]]].dropna().copy()
+_wf[measures[0]] = _wf[measures[0]].astype(float)
+_wf = _wf.reset_index(drop=True)
+_wf_vals = _wf[measures[0]].to_numpy(dtype=float)
+_wf_cum = np.concatenate(([0.0], np.cumsum(_wf_vals)))
+_wf_bottom = _wf_cum[:-1].copy()
+_wf_height = _wf_vals.copy()
+_wf_colors = [('#2A9D8F' if _v >= 0 else '#E76F51') for _v in _wf_vals]
+${ax}.bar(range(len(_wf_vals)), _wf_height, bottom=_wf_bottom, color=_wf_colors, edgecolor='white', linewidth=0.6)
+${ax}.plot(range(len(_wf_cum)), _wf_cum, color='#334155', linewidth=1.0, marker='o', markersize=3)
+${ax}.set_xticks(range(len(_wf_vals)), _wf[x_col].astype(str), rotation=30, ha='right')
+${ax}.set_ylabel(measures[0]); ${ax}.axhline(0, color='#64748B', linewidth=0.8)`
+    }
     if (kind === 'heatmap') {
       // 科研规则 §10.5：相关性热力图默认蓝白红发散（白为 0）；矩阵较小（≤8 维）时标注数值
-      const cmap = f.colormap === 'inspiration'
-        ? 'LinearSegmentedColormap.from_list("inspiration_corr", ["#3B4CC0", "#7FAED7", "#F7F4EA", "#E89A82", "#B40426"], N=256)'
-        : `plt.get_cmap(${pyQ(f.colormap ?? 'coolwarm')})`
+      const cmap = f.colormap === 'user_ocean'
+        ? 'LinearSegmentedColormap.from_list("user_ocean_corr", ["#DDF2F0", "#A6EBDD", "#88C9D0", "#929ED2", "#5E8CBE", "#3E5682", "#0F1633"], N=256)'
+        : f.colormap === 'viridis_like'
+        ? 'plt.get_cmap("viridis")'
+        : f.colormap === 'magma_like'
+          ? 'plt.get_cmap("magma")'
+          : f.colormap === 'teal_gold'
+        ? 'LinearSegmentedColormap.from_list("teal_gold_corr", ["#203A43", "#2A9D8F", "#F4E9CD", "#E9C46A", "#C44536"], N=256)'
+        : f.colormap === 'inspiration'
+          ? 'LinearSegmentedColormap.from_list("inspiration_corr", ["#3B4C6B", "#7FAED7", "#F7F4EA", "#E89A82", "#8F2D56"], N=256)'
+          : `plt.get_cmap(${pyQ(f.colormap ?? 'viridis')})`
       const annotate = c.measures.length <= 8
       return `corr = df[measures].corr(min_periods=3)
-if not np.isfinite(corr.to_numpy(dtype=float)).any(): raise ValueError("热力图没有至少 3 个完整观测构成的相关系数")
+if len(measures) < 2 or int(np.isfinite(corr.to_numpy(dtype=float)).sum()) < 4: raise ValueError("热力图需要至少 2 个数值字段且存在有效成对观测")
 im = ${ax}.imshow(corr, vmin=-1, vmax=1, cmap=${cmap})
 ${ax}.set_xticks(range(len(measures)), measures, rotation=35, ha="right")
 ${ax}.set_yticks(range(len(measures)), measures)
 ${ax}.set_aspect("equal")
 ${annotate ? `for _i in range(len(measures)):
     for _j in range(len(measures)):
-        ${ax}.text(_j, _i, f"{corr.iloc[_i, _j]:.2f}", ha="center", va="center", fontsize=${Number(f.annotationSize ?? 8.5)})` : ''}
+        _cell_value = float(corr.iloc[_i, _j])
+        _cell_rgba = im.cmap(im.norm(_cell_value))
+        _cell_luminance = 0.2126 * _cell_rgba[0] + 0.7152 * _cell_rgba[1] + 0.0722 * _cell_rgba[2]
+        _cell_text_color = "white" if _cell_luminance < 0.48 else "#111827"
+        ${ax}.text(_j, _i, f"{_cell_value:.2f}", ha="center", va="center", fontsize=${Number(f.annotationSize ?? 8.5)}, color=_cell_text_color)` : ''}
 _cb = fig.colorbar(im, ax=${ax}, fraction=0.046, pad=0.04)
 _cb.set_label("相关系数")`
     }

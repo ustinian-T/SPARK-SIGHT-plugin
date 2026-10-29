@@ -24,6 +24,19 @@ test('validateChartSpec：双Y轴少于 2 个数值列报 DUAL_AXIS_REQUIRES_TWO
   assert.throws(() => validateChartSpec(spec('dual_axis'), input(['a'])), /DUAL_AXIS_REQUIRES_TWO_MEASURES/)
 })
 
+test('validateChartSpec：热力图少于 2 个数值列不静默输出空矩阵', () => {
+  assert.throws(() => validateChartSpec(spec('heatmap'), input(['only'])), /HEATMAP_REQUIRES_TWO_NUMERIC_MEASURES/)
+})
+
+test('贡献瀑布图生成累计基线与正负增量编码', () => {
+  const code = generateCodeForSpec({
+    figure: { title: '贡献', rows: 1, cols: 1 },
+    panels: [{ layers: [{ kind: 'waterfall' }] }]
+  }, input(['阶段', '贡献值']))
+  assert.match(code.python, /_wf_cum/)
+  assert.match(code.python, /_wf_colors/)
+})
+
 test('棒棒糖图与气泡图：保留真实科研表达并生成尺寸/排序编码', () => {
   const lollipop = generateCodeForSpec(spec('lollipop'), input(['响应指标'])).python
   assert.match(lollipop, /hlines/)
@@ -104,13 +117,14 @@ test('三维折线与三维填充折线：按第二轴分层生成峰形轨迹',
   assert.match(filled, /alpha=0\.16, linewidth=3\.0/)
 })
 
-test('热力图 Python 模板：相关性矩阵（pandas3 兼容，无 numeric_only）、蓝白红可覆盖、小矩阵标注数值', () => {
+test('热力图 Python 模板：相关性矩阵（pandas3 兼容、非红蓝色阶、小矩阵标注数值）', () => {
   const code = generateCodeForSpec(spec('heatmap'), input(['a', 'b', 'c'])).python
   assert.match(code, /df\[measures\]\.corr\(min_periods=3\)/)
   assert.doesNotMatch(code, /numeric_only/)
   assert.match(code, /vmin=-1, vmax=1/)
-  assert.match(code, /cmap=.*coolwarm/)
+  assert.match(code, /cmap=.*(?:user_ocean_corr|teal_gold_corr|viridis)/)
   assert.match(code, /\.text\(/)
+  assert.match(code, /_cell_luminance/)
 })
 
 test('双Y轴 R 模板：sec_axis 比例换算', () => {

@@ -356,8 +356,8 @@ function correlationSignificance(result) {
 export function tTestIndependent(a, b, { equalVariance = false } = {}) {
   const left = (a ?? []).filter(Number.isFinite)
   const right = (b ?? []).filter(Number.isFinite)
-  if (left.length < 2 || right.length < 2) {
-    return { performed: false, n1: left.length, n2: right.length, reason: 't 检验每组至少需要 2 个非缺失观测' }
+  if (left.length < 3 || right.length < 3) {
+    return { performed: false, n1: left.length, n2: right.length, reason: '样本量不足：推断统计每组至少需要 3 个非缺失观测' }
   }
   const m1 = left.reduce((s, v) => s + v, 0) / left.length
   const m2 = right.reduce((s, v) => s + v, 0) / right.length
@@ -397,9 +397,9 @@ export function tTestIndependent(a, b, { equalVariance = false } = {}) {
  */
 export function anovaOneWay(groups) {
   const clean = (groups ?? []).map((g) => ({ name: g.name, values: (g.values ?? []).filter(Number.isFinite) }))
-  const valid = clean.filter((g) => g.values.length >= 2)
+  const valid = clean.filter((g) => g.values.length >= 3)
   if (valid.length < 2) {
-    return { performed: false, k: clean.length, reason: '单因素 ANOVA 至少需要 2 组、每组至少 2 个非缺失观测' }
+    return { performed: false, k: clean.length, reason: '样本量不足：单因素 ANOVA 至少需要 2 组、每组至少 3 个非缺失观测' }
   }
   const k = valid.length
   const all = valid.flatMap((g) => g.values)
@@ -449,8 +449,8 @@ export function pairedTTest(a, b) {
     if (Number.isFinite(a[index]) && Number.isFinite(b[index])) pairs.push([a[index], b[index]])
   }
   const n = pairs.length
-  if (n < 2) {
-    return { performed: false, n, reason: '配对 t 检验至少需要 2 对完整观测' }
+  if (n < 3) {
+    return { performed: false, n, reason: '样本量不足：配对 t 检验至少需要 3 对完整观测' }
   }
   const diffs = pairs.map(([x, y]) => x - y)
   const mean = diffs.reduce((s, v) => s + v, 0) / n
@@ -1134,6 +1134,13 @@ export function runDeterministicAnalysis({ profile, text, rawDelimiter, fileName
     plottedMeasures: summary.series.length,
     grouped: Boolean(summary.groups),
     warnings: [
+      ...(summary.series.length >= 2 && (() => {
+        const ranges = summary.series.map((series) => {
+          const values = series.y.filter(Number.isFinite)
+          return values.length ? Math.max(...values) - Math.min(...values) : 0
+        }).filter((value) => value > 0)
+        return ranges.length >= 2 && Math.max(...ranges) / Math.max(Math.min(...ranges), 1e-9) >= 10
+      })() ? ['检测到系列量纲/数值跨度相差 ≥10 倍；已优先考虑拆分面板或双 Y 轴，避免共轴压扁细节'] : []),
       ...(semanticModel?.fieldRoles?.xTime?.length && semanticModel?.fieldRoles?.group?.length && new Set(summary.x.map(String)).size < summary.x.length
         ? ['检测到时间×分组重复观测；当前候选应按时间与分组聚合后绘图，禁止直接把重复样本编号铺满横轴'] : []),
       ...(summary.x.length < 3 ? ['观测数少于 3，趋势/回归类表达应谨慎'] : []),

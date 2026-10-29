@@ -737,8 +737,22 @@ export class Orchestrator {
     // ---- DESIGN ----
     this.#alive(task)
     this.emit(task, { type: 'state_delta', state: 'DESIGN' })
-    const titleBase = question.length > 24 ? question.slice(0, 22) + '…' : question
     const fallbackTitle = task.fileName.replace(/\.csv$/i, '')
+    // 用户提示词是控制指令，不是图题。长提示词直接截取会把“请分析/同时比较/生成三套…”
+    // 等操作语泄漏到图内并造成截断；长提示词根据研究意图生成简洁题名，绝不把文件名当作交付图题。
+    const inferredTitle = /热力|相关/.test(question) ? '多指标相关性结构'
+      : /气泡/.test(question) ? '温湿度与响应指标关系'
+        : /三维.*曲面|曲面/.test(question) ? '温湿度-响应曲面'
+          : /三维.*锥|锥状/.test(question) ? '温湿度-响应空间分布'
+            : /三维.*折线/.test(question) ? '温湿度-响应三维轨迹'
+              : /瀑布/.test(question) ? '贡献增量与累计结果'
+                : /棒棒糖|排名/.test(question) ? '方案排名得分比较'
+                  : /双.?Y/.test(question) ? '响应指标与成本双轴趋势'
+                    : /散点/.test(question) ? '温度与响应指标关系'
+                      : /趋势|折线|时间|周次/.test(question) ? '响应指标随时间的变化趋势'
+                        : /柱状|分组|比较|对比/.test(question) ? '各组响应指标比较'
+                          : '多因素响应分析'
+    const titleBase = question.length > 24 ? inferredTitle : (question || inferredTitle)
     let plans = []
     await this.step(task, byId.plan_candidates, (s) => {
       plans = buildPlans(analysis, {

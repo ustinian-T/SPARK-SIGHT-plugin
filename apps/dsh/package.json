@@ -1,6 +1,6 @@
 {
   "name": "sparksight-dsh",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "SPARK SIGHT for DeepSeek Harness: research plotting inside the agent harness",
   "type": "module",
   "main": "./index.js",
@@ -51,11 +51,11 @@
   "homepage": "https://www.example.com",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ustinian-T/deep_imaging.git",
+    "url": "https://github.com/ustinian-T/SPARK-SIGHT-plugin.git",
     "directory": "apps/dsh"
   },
   "bugs": {
-    "url": "https://github.com/ustinian-T/deep_imaging/issues"
+    "url": "https://github.com/ustinian-T/SPARK-SIGHT-plugin/issues"
   },
   "publishConfig": {
     "access": "public",

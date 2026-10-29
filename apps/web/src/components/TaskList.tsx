@@ -1,5 +1,6 @@
 // 任务列表（Sidebar 中部）：展示当前项目下的任务，支持打开历史任务、删除任务、新建任务入口。
 // 状态圆点颜色：running=蓝 / done=绿 / failed=红 / 其他=灰。
+import { useState } from 'react'
 import { useStore } from '../state/store'
 import { Button, Dot, Tooltip } from './common'
 import { Icon } from './icons'
@@ -16,6 +17,7 @@ function toneOf(state: AgentState): 'info' | 'ok' | 'danger' | 'muted' {
 
 export function TaskList() {
   const { state, openTask, deleteProjectTask, startNewTask } = useStore()
+  const [confirmClear, setConfirmClear] = useState(false)
   const tasks = state.projectTasks
   const currentId = state.task?.taskId
 
@@ -28,6 +30,13 @@ export function TaskList() {
     }
   }
 
+  const failedTasks = tasks.filter((task) => task.state === 'FAILED')
+  const clearFailed = async () => {
+    if (!confirmClear) { setConfirmClear(true); return }
+    setConfirmClear(false)
+    await Promise.allSettled(failedTasks.map((task) => deleteProjectTask(state.currentProjectId, task.taskId)))
+  }
+
   return (
     <div className="tasklist col-stack" style={{ minHeight: 0, flex: 1 }}>
       <Tooltip content="上传一份 CSV，开始一次新的分析任务。" placement="right">
@@ -35,6 +44,11 @@ export function TaskList() {
           新建任务
         </Button>
       </Tooltip>
+      {failedTasks.length > 0 && (
+        <Button size="xs" variant="ghost" icon="close" onClick={() => void clearFailed()} title="批量移除失败任务（不可恢复）">
+          {confirmClear ? `再次点击确认清理 ${failedTasks.length} 条失败任务` : `清理失败任务（${failedTasks.length}）`}
+        </Button>
+      )}
 
       {state.projectsError && (
         <div className="inline-alert inline-alert--danger" style={{ padding: '6px 8px', fontSize: 11.5 }} role="alert">
@@ -64,6 +78,12 @@ export function TaskList() {
                   background: active ? 'var(--brand-50, rgba(37,99,235,0.08))' : 'transparent'
                 }}
                 onClick={() => void openTask(t.taskId)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); void openTask(t.taskId) } }}
+                role="button"
+                tabIndex={0}
+                aria-current={active ? 'page' : undefined}
+                data-task-id={t.taskId}
+                data-task-state={t.state}
                 title={`打开任务：${t.title}`}
               >
                 <Dot tone={toneOf(t.state)} pulse={toneOf(t.state) === 'info'} />

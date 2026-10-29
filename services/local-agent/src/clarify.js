@@ -143,11 +143,14 @@ export function parseChartType(answer) {
   if (/三维折线|3d折线|line3/i.test(a)) return { chartType: 'line3d' }
   if (/小提琴/i.test(a)) return { chartType: 'violin' }
   if (/森林|效应量.*置信区间|置信区间.*森林/i.test(a)) return { chartType: 'forest' }
+  if (/排名|棒棒糖|lollipop/i.test(a)) return { chartType: 'lollipop' }
+  if (/瀑布|waterfall/i.test(a)) return { chartType: 'waterfall' }
   if (/分布|离群|箱线|原始散点/i.test(a)) return { chartType: 'box' }
   if (/热力|相关系数矩阵|相关矩阵/i.test(a)) return { chartType: 'heatmap' }
   if (/折线|趋势线|line/i.test(a)) return { chartType: 'line' }
   if (/柱状|柱形|条形|bar/i.test(a)) return { chartType: 'bar' }
   if (/散点|scatter/i.test(a)) return { chartType: 'scatter' }
+  if (/气泡|bubble/i.test(a)) return { chartType: 'bubble' }
   if (/箱线|盒须|box/i.test(a)) return { chartType: 'box' }
   return { chartType: 'auto', defaulted: true }
 }

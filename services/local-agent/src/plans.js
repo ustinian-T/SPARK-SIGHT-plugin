@@ -113,7 +113,9 @@ function makeSpec(strategy, title, subtitle, xLabel, yLabel, series) {
 function panelFor(kind, id, row, col, xLabel, yLabel, series, { normalized = false, errors = false } = {}) {
   return {
     panel_id: id,
-    title: kind === 'heatmap' ? '相关性矩阵' : kind === 'scatter' ? '变量关系' : normalized ? '相对首点变化 (%)' : '',
+    // 单面板图已经有 figure.title；重复绘制“变量关系/相关性矩阵”会与主标题
+    // 叠在一起，尤其在中文字体回退时形成遮挡。仅保留归一化复合面板的语义标题。
+    title: normalized ? '相对首点变化 (%)' : '',
     row,
     col,
     layers: layers(kind, series, id, errors),
@@ -155,6 +157,9 @@ function makeCandidateSpec(candidate, strategy, title, xLabel, yLabel, series, e
   if (candidate.chartType === 'point_scatter') {
     return { figure: common, panels: [panelFor('scatter', 'panel_0', 0, 0, xLabel, yLabel, series)] }
   }
+  if (candidate.chartType === 'bubble') {
+    return { figure: common, panels: [panelFor('bubble', 'panel_0', 0, 0, xLabel, yLabel, series)] }
+  }
   if (candidate.chartType === 'correlation_heatmap') {
     return { figure: common, panels: [panelFor('heatmap', 'panel_0', 0, 0, xLabel, yLabel, series)] }
   }
@@ -167,6 +172,12 @@ function makeCandidateSpec(candidate, strategy, title, xLabel, yLabel, series, e
   }
   if (candidate.chartType === 'dot_plot') {
     return { figure: common, panels: [panelFor('dotplot', 'panel_0', 0, 0, xLabel, yLabel, series)] }
+  }
+  if (candidate.chartType === 'lollipop') {
+    return { figure: common, panels: [panelFor('lollipop', 'panel_0', 0, 0, xLabel, yLabel, series)] }
+  }
+  if (candidate.chartType === 'waterfall') {
+    return { figure: common, panels: [panelFor('waterfall', 'panel_0', 0, 0, xLabel, yLabel, series)] }
   }
   // v0.4.2：堆叠柱状（多系列正值累加）
   if (candidate.chartType === 'stacked_area') {
@@ -204,6 +215,18 @@ function makeCandidateSpec(candidate, strategy, title, xLabel, yLabel, series, e
   if (candidate.chartType === 'scatter3d') {
     return { figure: common, panels: [panelFor('scatter3d', 'panel_0', 0, 0, xLabel, yLabel, series)] }
   }
+  // 长表/时间×分组数据只有一个真实测量列时，不能套用宽表 2×2
+  // （其中的 heatmap/scatter 会要求两个真实数值字段）。保留信息密度角色，
+  // 改为“趋势 + 分布”双面板，两个面板都绑定同一真实测量列。
+  if (extra.grouped) {
+    return {
+      figure: { ...common, rows: 1, cols: 2, widthIn: 10.2, heightIn: 4.2 },
+      panels: [
+        panelFor('line', 'panel_trend', 0, 0, xLabel, yLabel, series),
+        panelFor('box_jitter', 'panel_distribution', 0, 1, xLabel, yLabel, series)
+      ]
+    }
+  }
   return {
     figure: common,
     panels: [
@@ -220,6 +243,7 @@ const CHART_LABEL = {
   grouped_bar_error: '分组柱状图（误差棒）',
   line_error: '多系列折线图（误差棒）',
   point_scatter: '双变量散点图',
+  bubble: '气泡图',
   correlation_heatmap: '相关性热力图',
   dual_line_normalized: '1×2 趋势与归一化复合图',
   dual_line_normalized_2x1: '2×1 趋势与归一化复合图',
@@ -227,6 +251,8 @@ const CHART_LABEL = {
   box_plot: '箱线图（含抖动散点）',
   violin_plot: '小提琴图',
   dot_plot: '误差棒点图',
+  lollipop: '排名棒棒糖图',
+  waterfall: '贡献瀑布图',
   stacked_area: '堆叠柱状图',
   paired_dot: '配对连线图',
   forest: '森林图（均值 ± 95% CI）',
@@ -249,15 +275,16 @@ const CLARIFY_CHARTTYPE_TO_CANDIDATE = Object.freeze({
   bar: 'grouped_bar',
   grouped_bar: 'grouped_bar',
   scatter: 'point_scatter',
+  bubble: 'bubble',
   box: 'box_plot',
   // v0.4.2：新图型可显式点名（clarify 结构化表单的图型偏好映射）
   violin: 'violin_plot',
   dot_plot: 'dot_plot',
   stacked_area: 'stacked_area',
   paired_dot: 'paired_dot',
-  forest: 'forest'
-  ,line3d: '三维折线图'
-  ,filled_line3d: '三维折线填充图'
+  forest: 'forest',
+  lollipop: 'lollipop',
+  waterfall: 'waterfall'
 })
 
 // 反馈确认也可能携带用户界面展示的中文图型名称；统一归一化后再进入候选池，
@@ -277,9 +304,12 @@ export function normalizeRequestedChartType(value) {
   if (/小提琴/.test(text)) return 'violin'
   if (/箱线/.test(text)) return 'box'
   if (/森林/.test(text)) return 'forest'
+  if (/排名|棒棒糖|lollipop/i.test(text)) return 'lollipop'
+  if (/瀑布|waterfall/i.test(text)) return 'waterfall'
   if (/堆叠/.test(text)) return 'stacked_area'
   if (/配对.*点|配对连线/.test(text)) return 'paired_dot'
   if (/散点/.test(text)) return 'scatter'
+  if (/气泡|bubble/i.test(text)) return 'bubble'
   if (/点图|点状/.test(text)) return 'dot_plot'
   if (/柱|条形/.test(text)) return 'grouped_bar'
   if (/折线/.test(text)) return 'line'
@@ -395,7 +425,13 @@ export function buildPlans(analysis, opts) {
   const candidateAnalysis = explicit3dReady
     ? { ...analysis, chartContext: { ...analysis.chartContext, spatialReady: true, spatialDiagnostics: { ...(analysis.chartContext?.spatialDiagnostics ?? {}), source: 'explicit_user_request', requiredNumericFields: 3 } } }
     : analysis
-  const pool = buildCandidatePool(candidateAnalysis)
+  // 长表/时间×分组数据的 summary.series 是“组均值系列”，标签不是原始数值列。
+  // 热力图需要至少两个真实数值字段；若直接把组标签传入 codegen，会在真实执行阶段
+  // 才触发 HEATMAP_REQUIRES_TWO_NUMERIC_MEASURES。规划阶段提前排除该候选，改由
+  // 散点、双 Y 轴或分布图承担多变量表达，避免把可预见的数据形态错误暴露给用户。
+  const pool = buildCandidatePool(candidateAnalysis).filter((candidate) =>
+    !(candidate.chartType === 'correlation_heatmap' && (summary.groups || summary.timeGrouped))
+  )
   // An explicit plot family is a constraint, not a preference competing with MMR.
   // Three alternatives vary presentation while preserving the requested marks.
   const explicitBar = /(?:分组|簇状|柱状|柱形|条形)图|grouped\s*bar|bar\s*(?:chart|plot)/i.test(userRequest)
@@ -497,6 +533,8 @@ export function buildPlans(analysis, opts) {
     const redEnc = palette.redundantEncoding ?? { enabled: false, lineStyles: [], markers: [] }
     // v0.4.2：chartType → codegen kind 映射（真图型而非占位）
     const codegenKindOf = (chartType) => chartType.includes('bar') ? 'bar'
+      : chartType === 'lollipop' ? 'lollipop'
+        : chartType === 'waterfall' ? 'waterfall'
       : chartType === 'box_plot' ? 'box_jitter'
         : chartType === 'violin_plot' ? 'violin'
           : chartType === 'dot_plot' ? 'dotplot'
@@ -508,7 +546,8 @@ export function buildPlans(analysis, opts) {
                       : chartType === 'surface3d' ? 'surface3d'
                       : chartType === 'cone3d' || chartType === 'line3d' || chartType === 'filled_line3d' ? chartType
                         : chartType === 'scatter3d' ? 'scatter3d'
-                          : chartType.includes('scatter') ? 'scatter'
+                            : chartType === 'bubble' ? 'bubble'
+                            : chartType.includes('scatter') ? 'scatter'
                             : 'line'
     // v0.4.1/v0.4.2：长表分组形态（分组列+数值列）→ 系列即组均值 ± 标准误（组间比较的标准形态）；
     // 否则保持宽表多测量系列（含 _sd 误差棒）。
@@ -536,7 +575,11 @@ export function buildPlans(analysis, opts) {
     // 分组/时间聚合是数据语义，不应因展示策略切换而丢失。此前 density
     // 策略跳过 groupsShape，导致系列标签（如“对照组”）被当成 CSV 列名。
     // 只有逐行语义的森林图、配对图和堆叠图例外保留原始行结构。
-    const groupsShape = (summary.groups ?? timeGroupedShape) && (strategy !== 'density' || explicitBar || structuredComparison) && !['forest', 'paired_dot', 'stacked_area'].includes(candidate.chartType)
+    // 复合密度方案也必须沿用长表的真实分组聚合；否则会把“对照组”等组值
+    // 当作 CSV 列名传给折线/散点代码，导致 FIELD/field.missing 并让第三套方案
+    // 在真实执行阶段失效。逐条目图型仍保留原始行语义。
+    const keepGroupedDensity = summary.timeGrouped || strategy !== 'density' || explicitBar || structuredComparison
+    const groupsShape = (summary.groups ?? timeGroupedShape) && keepGroupedDensity && !['forest', 'paired_dot', 'stacked_area', 'lollipop', 'waterfall'].includes(candidate.chartType)
       ? (summary.groups ?? timeGroupedShape) : null
     const isTimeGrouped = Boolean(summary.timeGrouped && groupsShape?.xCol)
     const series = groupsShape
@@ -581,9 +624,23 @@ export function buildPlans(analysis, opts) {
     const { title, caption, typography } = resolvePresentation(effectiveClarification, { title: defaultTitle, figureIndex: 1 })
     const chartExtraMeasures = (summary.groups ?? timeGroupedShape) && candidate.chartType === 'forest' ? [(summary.groups ?? timeGroupedShape).measure] : measures
     const spec = groupsShape
-      ? applyGroupAnnotations(makeCandidateSpec(candidate, strategy, title, xLabel, yLabel, series), { ...summary, groups: groupsShape }, evidence)
+      ? applyGroupAnnotations(makeCandidateSpec(candidate, strategy, title, xLabel, yLabel, series, { grouped: true }), { ...summary, groups: groupsShape }, evidence)
       : makeCandidateSpec(candidate, strategy, title, xLabel, yLabel, series, buildChartExtra(candidate.chartType, chartExtraMeasures, evidence))
-    spec.figure.displayedFields = [xLabel, ...measures].filter(Boolean)
+    const spatialMeasures = ['surface3d', 'scatter3d', 'cone3d', 'line3d', 'filled_line3d'].includes(candidate.chartType)
+      ? (requestedZField && requestedXField && requestedYField
+        ? [requestedXField, requestedYField, requestedZField]
+        : (analysis.chartContext?.spatialFields ?? []).slice(0, 3))
+      : measures
+    const isSpatialCandidate = ['surface3d', 'scatter3d', 'cone3d', 'line3d', 'filled_line3d'].includes(candidate.chartType)
+    // 保持原始测量系列顺序，避免证据账本按序号绑定时发生错位；三维 X 轴补充系列放在末尾，
+    // verify 仍可读取前三个完整轴值，同时温度/湿度/响应指标的描述统计证据保持原绑定。
+    const planSeries = isSpatialCandidate
+      ? [...series, { id: 'spatial_x', label: requestedXField || xLabel, y: (summary.x ?? []).map(Number), values: (summary.x ?? []).map(Number), synthetic: true }]
+      : series
+    spec.figure.displayedFields = [xLabel, ...(isSpatialCandidate ? spatialMeasures : measures)].filter(Boolean)
+    // 热力图使用项目内置“用户预设一·青蓝递进”：低饱和、色阶柔和，
+    // 同时保持从浅青到深蓝的明暗层级，适合 PPT 与报告页面。
+    if (candidate.chartType === 'correlation_heatmap') spec.figure.colormap = 'user_ocean'
     // 仅记录真实数据字段；“测量值”等展示性泛称不应被当作字段参与一致性校验。
     spec.figure.titleFields = [requestedYField].filter(Boolean)
     spec.figure.groupField = taskSpec?.fieldSlots?.groupField ?? groupsShape?.groupCol ?? null
@@ -597,7 +654,11 @@ export function buildPlans(analysis, opts) {
     }
     // 将实际横轴类别数写入规格，供视觉质量门禁阻断“36 个样本编号挤在横轴”的不可读图。
     for (const panel of spec.panels ?? []) {
-      if (panel.categoryCount == null) panel.categoryCount = Array.isArray(summary.x) ? summary.x.length : undefined
+      const panelKinds = (panel.layers ?? []).map((layer) => layer.kind)
+      const needsCategoryDensityGate = panelKinds.some((kind) => ['bar', 'line', 'box_jitter', 'violin', 'lollipop', 'waterfall', 'stacked'].includes(kind))
+      if (panel.categoryCount == null && !isSpatialCandidate && needsCategoryDensityGate) {
+        panel.categoryCount = Array.isArray(summary.x) ? new Set(summary.x.map(String)).size : undefined
+      }
     }
     if (explicitBar) for (const panel of spec.panels) {
       if (strategy === 'convention') {
@@ -623,11 +684,6 @@ export function buildPlans(analysis, opts) {
     // 三维图的二次处理仅作用于绘图派生数据，原始数据与证据链保持不变。
     if (effectiveClarification?.secondaryProcessing) spec.figure.secondaryProcessing = effectiveClarification.secondaryProcessing
     applyTypographyToSpec(spec, typography)
-    const spatialMeasures = ['surface3d', 'scatter3d', 'cone3d', 'line3d', 'filled_line3d'].includes(candidate.chartType)
-      ? (requestedZField && requestedXField && requestedYField
-        ? [requestedXField, requestedYField, requestedZField]
-        : (analysis.chartContext?.spatialFields ?? []).slice(0, 3))
-      : measures
     // 长表/时间×分组聚合时，series label 是“对照组/处理组”等组值，
     // 真实 CSV 列仍只有 groupsShape.measure（如“响应指标”）。代码生成必须使用后者，
     // 防止把组值误当成不存在的数据列。
@@ -676,7 +732,7 @@ export function buildPlans(analysis, opts) {
         ...(analysis.processingTrace.operations ?? []),
         ...(groupsShape ? [{ id: 'plot_group_mean', scope: 'chart', groupField: groupsShape.groupCol, measure: groupsShape.measure, description: '该方案按分组绘制均值与标准误；原始组内观测随 data.csv 保留' }] : [])
       ],
-      series: series.map((item) => ({
+          series: planSeries.map((item) => ({
         field: item.label,
         sourceField: groupsShape ? groupsShape.measure : item.label,
         observed: Array.isArray(item.values) ? item.values.length : 0,
@@ -699,7 +755,7 @@ export function buildPlans(analysis, opts) {
       taskSpec: taskSpec ? { fieldSlots: taskSpec.fieldSlots ?? {}, pendingFields: taskSpec.pendingFields ?? [] } : null,
       engine,
       spec,
-      series,
+      series: planSeries,
       score: { ...candidate.score, scoreBreakdown: candidate.scoreBreakdown },
       mmrScore: mmrTrace ? mmrTrace.mmrScore : candidate.score.total,
       mmrUtility: mmrTrace ? mmrTrace.utility : null,

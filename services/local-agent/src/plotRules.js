@@ -167,6 +167,14 @@ export function checkRequestedChartType(requested, actual) {
     dual_axis: ['dual_axis'],
     surface3d: ['surface3d'],
     scatter3d: ['scatter3d'],
+    bubble: ['bubble'],
+    violin: ['violin', 'violin_plot'],
+    forest: ['forest'],
+    lollipop: ['lollipop'],
+    waterfall: ['waterfall'],
+    line3d: ['line3d'],
+    filled_line3d: ['filled_line3d'],
+    cone3d: ['cone3d'],
     scatter: ['scatter', 'point_scatter']
   }
   const accepted = aliases[req] ?? [req]

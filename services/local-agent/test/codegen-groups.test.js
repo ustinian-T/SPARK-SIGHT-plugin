@@ -51,6 +51,21 @@ test('长表分组：plan.spec 注入 groups/errorBarMode/significance，interpr
   }
 })
 
+test('时间×分组密度方案：使用趋势+分布双面板，不把组值当成字段或触发热力图门禁', () => {
+  const csv = [
+    'week,group,value',
+    'w1,a,1', 'w1,b,4',
+    'w2,a,2', 'w2,b,5',
+    'w3,a,3', 'w3,b,6'
+  ].join('\n') + '\n'
+  const plans = plansFor(csv)
+  const density = plans.find((plan) => plan.strategy === 'density')
+  assert.ok(density)
+  assert.deepEqual(density.spec.panels.map((panel) => panel.layers?.[0]?.kind), ['line', 'box_jitter'])
+  assert.ok(density.code.python.includes('boxplot'))
+  assert.ok(!density.code.python.includes('HEATMAP_REQUIRES_TWO_NUMERIC_MEASURES'))
+})
+
 test('长表分组：生成的 Python 代码含分组聚合，按图型含分布/误差棒与显著性标注语法', () => {
   const csv = 'group,value\na,1\na,2\na,3\nb,9\nb,10\nb,11\nc,1\nc,2\nc,3\n'
   const plans = plansFor(csv)

@@ -315,6 +315,7 @@ function checkEvidenceConsistency({ plan, evidence, text, rawDelimiter }) {
     }
   } else {
     for (const s of plan.series) {
+      if (s.synthetic) continue
       const idx = header.indexOf(s.label)
       if (idx < 0) {
         passed = false

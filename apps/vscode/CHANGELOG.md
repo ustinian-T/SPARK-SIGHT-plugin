@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.7 — 2026-10-29
+
+- Sync the workbench and Agent with upstream 5bd0553: chart-shape fallbacks, statistical gates, grouped candidate selection, title safety and heatmap palettes.
+- Refresh bundled Windows runtimes and shared code together with desktop 0.1.6 and DSH 0.5.1.
+
+
 ## 0.1.6 — 2026-10-26
 
 - Refresh the bundled Agent and workbench with current chart intent, group ordering and label margin fixes.

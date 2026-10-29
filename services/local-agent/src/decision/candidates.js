@@ -33,12 +33,22 @@ export function dataSignals(analysis) {
   const groupComparison = obsCount <= 4 && seriesCount >= 2
   // 趋势判定（启发式）：观测点 ≥5
   const trend = obsCount >= 5
+  const ranges = analysis.summary.series.map((series) => {
+    const values = (series.y ?? []).filter(Number.isFinite)
+    return values.length ? Math.max(...values) - Math.min(...values) : 0
+  }).filter((value) => value > 0)
+  const scaleRatio = ranges.length >= 2 ? Math.max(...ranges) / Math.max(Math.min(...ranges), 1e-9) : 1
+  const mixedScale = scaleRatio >= 10
   const matrixLike = seriesCount >= 4 && obsCount <= 8
+  const header = (analysis.summary.header ?? []).map((name) => String(name))
+  const headerText = header.join(' ')
+  const rankLike = /排名|rank|名次|指标排序|top\s*\d/i.test(headerText) && obsCount <= 20
+  const waterfallLike = /瀑布|waterfall|贡献|增量|累计|起点|终点/i.test(headerText) && obsCount <= 30
   // v0.4.2：长表分组形态（分组列 + 数值列）→ 箱线+抖动/小提琴/误差棒点图天然契合
   const grouped = Boolean(analysis.summary.groups)
   const spatialReady = analysis.chartContext?.spatialReady === true && obsCount >= 4
   const spatialDiagnostics = analysis.chartContext?.spatialDiagnostics ?? null
-  return { seriesCount, numericMeasureCount, obsCount, hasErrorBars, errorBarKinds, highDensity, groupComparison, trend, matrixLike, grouped, spatialReady, spatialDiagnostics }
+  return { seriesCount, numericMeasureCount, obsCount, hasErrorBars, errorBarKinds, highDensity, groupComparison, trend, mixedScale, scaleRatio, matrixLike, rankLike, waterfallLike, grouped, spatialReady, spatialDiagnostics }
 }
 
 export function candidateSubscores(candidate, signals, base) {
@@ -55,8 +65,8 @@ export function candidateSubscores(candidate, signals, base) {
     DataFit = signals.numericMeasureCount >= 3 && signals.spatialReady ? 0.88 : 0.42
     TaskFit = signals.numericMeasureCount >= 3 && signals.spatialReady ? 0.86 : 0.5
   } else if (chartType.includes('dual_axis')) {
-    DataFit = signals.trend && signals.numericMeasureCount >= 2 ? 0.86 : 0.55
-    TaskFit = signals.trend && signals.numericMeasureCount >= 2 ? 0.84 : 0.58
+    DataFit = signals.trend && signals.numericMeasureCount >= 2 ? (signals.mixedScale ? 0.95 : 0.86) : 0.55
+    TaskFit = signals.trend && signals.numericMeasureCount >= 2 ? (signals.mixedScale ? 0.92 : 0.84) : 0.58
   } else if (chartType.includes('scatter')) {
     DataFit = signals.trend && signals.seriesCount >= 2 ? 0.9 : 0.64
     TaskFit = signals.trend ? 0.86 : 0.68
@@ -64,11 +74,17 @@ export function candidateSubscores(candidate, signals, base) {
     DataFit = signals.seriesCount === 2 ? 0.95 : 0.5
     TaskFit = signals.seriesCount === 2 ? 0.92 : 0.55
   } else if (chartType.includes('box_plot')) {
-    DataFit = signals.grouped || signals.groupComparison || signals.seriesCount >= 3 ? 0.9 : 0.6
-    TaskFit = signals.grouped || signals.groupComparison || signals.seriesCount >= 3 ? 0.88 : 0.6
+    DataFit = !signals.rankLike && !signals.waterfallLike && (signals.grouped || signals.groupComparison || signals.seriesCount >= 3) ? 0.9 : 0.35
+    TaskFit = !signals.rankLike && !signals.waterfallLike && (signals.grouped || signals.groupComparison || signals.seriesCount >= 3) ? 0.88 : 0.4
   } else if (chartType.includes('violin_plot')) {
-    DataFit = signals.grouped || signals.seriesCount >= 3 ? 0.87 : 0.55
-    TaskFit = signals.grouped || signals.seriesCount >= 3 ? 0.86 : 0.58
+    DataFit = !signals.rankLike && !signals.waterfallLike && (signals.grouped || signals.seriesCount >= 3) ? 0.87 : 0.35
+    TaskFit = !signals.rankLike && !signals.waterfallLike && (signals.grouped || signals.seriesCount >= 3) ? 0.86 : 0.4
+  } else if (chartType === 'lollipop') {
+    DataFit = signals.rankLike ? 0.95 : 0.45
+    TaskFit = signals.rankLike ? 0.92 : 0.5
+  } else if (chartType === 'waterfall') {
+    DataFit = signals.waterfallLike ? 0.95 : 0.4
+    TaskFit = signals.waterfallLike ? 0.92 : 0.45
   } else if (chartType === 'dot_plot') {
     // 误差棒点图：分组形态（组均值±SE）或宽表多系列（系列均值±SE）
     DataFit = signals.grouped || (signals.trend && signals.seriesCount >= 2) ? 0.9 : 0.6
@@ -84,8 +100,8 @@ export function candidateSubscores(candidate, signals, base) {
     DataFit = signals.groupComparison || signals.matrixLike ? 0.94 : signals.trend ? 0.58 : 0.78
     TaskFit = signals.groupComparison || signals.matrixLike ? 0.92 : 0.66
   } else if (chartType === 'line_error') {
-    DataFit = signals.trend ? 0.96 : 0.58
-    TaskFit = signals.trend ? 0.94 : 0.55
+    DataFit = signals.trend ? (signals.mixedScale ? 0.68 : 0.96) : 0.58
+    TaskFit = signals.trend ? (signals.mixedScale ? 0.72 : 0.94) : 0.55
   } else if (chartType === 'panel_2x2') {
     DataFit = signals.matrixLike || signals.highDensity ? 0.94 : 0.7
     TaskFit = signals.matrixLike ? 0.95 : 0.74
@@ -221,12 +237,66 @@ export function buildCandidatePool(analysis) {
       },
       base: 'c_clarity_bar',
       adjust: { TaskFit: sig.trend ? -0.04 : 0.02, Readability: -0.08, ScientificConvention: -0.06 },
-      infeasibleReason: sig.seriesCount >= 2 ? null : 'SCATTER_REQUIRES_TWO_NUMERIC_MEASURES'
+      // 散点图只需要一个数值 Y 系列加一个数值 X 轴；此前错误地要求两个
+      // Y 系列，导致正常的二维散点数据被淘汰，候选回退到气泡图并触发
+      // BUBBLE_REQUIRES_TWO_NUMERIC_MEASURES。
+      infeasibleReason: sig.seriesCount >= 1 ? null : 'SCATTER_REQUIRES_NUMERIC_MEASURE'
+    },
+    {
+      candidateId: 'c_clarity_bubble',
+      strategy: 'clarity',
+      chartType: 'bubble',
+      condition: sig.numericMeasureCount >= 2 && sig.obsCount >= 4,
+      features: {
+        chartType: 'bubble',
+        layout: { rows: 1, cols: 1, panels: 1 },
+        encoding: { marks: ['point'], xType: 'linear', errorBars: false, normalized: false, size: 'third_measure' },
+        statPresentation: { raw: true, errorBars: false, normalized: false, significance: false },
+        color: { mode: 'sequential', monochromePrint: false },
+        annotation: { kinds: ['size_legend'], count: 1 }
+      },
+      base: 'c_clarity_bar',
+      adjust: { TaskFit: 0.04, Readability: -0.02, ScientificConvention: 0.01 },
+      infeasibleReason: sig.numericMeasureCount >= 2 ? null : 'BUBBLE_REQUIRES_TWO_NUMERIC_MEASURES'
     }
   ]
 
   // V2 新增四类图型候选（按数据信号条件进入池，保证池规模动态 6~12）
   const conditionalVariants = [
+    {
+      candidateId: 'c_clarity_lollipop',
+      strategy: 'clarity',
+      chartType: 'lollipop',
+      condition: sig.rankLike,
+      features: {
+        chartType: 'lollipop',
+        layout: { rows: 1, cols: 1, panels: 1 },
+        encoding: { marks: ['point', 'stem'], xType: 'categorical', errorBars: false, normalized: false },
+        statPresentation: { raw: true, errorBars: false, normalized: false, significance: false },
+        color: { mode: 'categorical', monochromePrint: false },
+        annotation: { kinds: ['value_label'], count: 1 }
+      },
+      base: 'c_clarity_bar',
+      adjust: { DataFit: 0.12, TaskFit: 0.1, Readability: 0.02 },
+      infeasibleReason: null
+    },
+    {
+      candidateId: 'c_clarity_waterfall',
+      strategy: 'clarity',
+      chartType: 'waterfall',
+      condition: sig.waterfallLike,
+      features: {
+        chartType: 'waterfall',
+        layout: { rows: 1, cols: 1, panels: 1 },
+        encoding: { marks: ['bar', 'line'], xType: 'categorical', errorBars: false, normalized: false },
+        statPresentation: { raw: true, errorBars: false, normalized: false, significance: false },
+        color: { mode: 'diverging', monochromePrint: false },
+        annotation: { kinds: ['cumulative_total'], count: 1 }
+      },
+      base: 'c_clarity_bar',
+      adjust: { DataFit: 0.12, TaskFit: 0.1, Readability: 0.01 },
+      infeasibleReason: null
+    },
     {
       candidateId: 'c_density_2x2',
       strategy: 'density',
@@ -249,7 +319,7 @@ export function buildCandidatePool(analysis) {
       candidateId: 'c_clarity_box',
       strategy: 'clarity',
       chartType: 'box_plot',
-      condition: sig.grouped || sig.groupComparison || sig.seriesCount >= 3,
+      condition: !sig.rankLike && !sig.waterfallLike && (sig.grouped || sig.groupComparison || sig.seriesCount >= 3),
       features: {
         chartType: 'box_plot',
         layout: { rows: 1, cols: 1, panels: 1 },
@@ -266,7 +336,7 @@ export function buildCandidatePool(analysis) {
       candidateId: 'c_convention_violin',
       strategy: 'convention',
       chartType: 'violin_plot',
-      condition: sig.grouped || sig.seriesCount >= 3,
+      condition: !sig.rankLike && !sig.waterfallLike && (sig.grouped || sig.seriesCount >= 3),
       features: {
         chartType: 'violin_plot',
         layout: { rows: 1, cols: 1, panels: 1 },
@@ -318,7 +388,7 @@ export function buildCandidatePool(analysis) {
       strategy: 'density',
       chartType: 'stacked_area',
       // v0.4.2：堆叠柱不要求趋势（多系列正值即可），放宽为系列数 ≥3
-      condition: sig.seriesCount >= 3,
+      condition: sig.seriesCount >= 3 && sig.numericMeasureCount >= 2,
       features: {
         chartType: 'stacked_area',
         layout: { rows: 1, cols: 1, panels: 1 },
@@ -335,7 +405,7 @@ export function buildCandidatePool(analysis) {
       candidateId: 'c_clarity_paired_dot',
       strategy: 'clarity',
       chartType: 'paired_dot',
-      condition: sig.seriesCount === 2,
+      condition: sig.seriesCount === 2 && sig.numericMeasureCount >= 2,
       features: {
         chartType: 'paired_dot',
         layout: { rows: 1, cols: 1, panels: 1 },
@@ -483,7 +553,7 @@ export function buildCandidatePool(analysis) {
   // 候选池规模约束 K ∈ [6,15]：条件候选过多时按效用分从低到高确定性裁剪。
   // v0.4.2：用户可显式点名的图型（热力/双Y轴/三维/箱线/小提琴/误差棒点图/堆叠/配对/森林）恒保留，
   // 保证 clarify 强制点名不被池裁剪静默吞掉；只裁剩余条件候选（如复合面板降级项）。
-  const KEEP_CHART_TYPES = new Set(['dual_axis', 'surface3d', 'scatter3d', 'cone3d', 'line3d', 'filled_line3d', 'panel_2x2', 'box_plot', 'violin_plot', 'dot_plot', 'stacked_area', 'paired_dot', 'forest', 'correlation_heatmap'])
+  const KEEP_CHART_TYPES = new Set(['dual_axis', 'surface3d', 'scatter3d', 'cone3d', 'line3d', 'filled_line3d', 'bubble', 'panel_2x2', 'box_plot', 'violin_plot', 'dot_plot', 'stacked_area', 'paired_dot', 'forest', 'correlation_heatmap', 'lollipop', 'waterfall'])
   if (pool.length > MAX_POOL_SIZE) {
     const excess = pool.length - MAX_POOL_SIZE
     const droppable = pool.filter((c) => c.conditional && !KEEP_CHART_TYPES.has(c.chartType))

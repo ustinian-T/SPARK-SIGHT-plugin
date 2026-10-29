@@ -147,7 +147,7 @@ function PlanCard({ plan, onZoom, realSvg }: { plan: PlotPlan; onZoom: () => voi
           {plan.name}
         </div>
         <div className="plancard__strat">
-          <Badge tone="brand">{plan.comparisonRole === 'user_request' ? '按用户要求' : `系统推荐 · ${STRATEGY_LABEL[plan.strategy]}`}</Badge>{' '}
+          <Badge tone="brand">{plan.comparisonRole === 'user_request_converged' ? '按用户要求 · 图型已收敛' : plan.comparisonRole === 'user_request' ? '按用户要求' : `系统推荐 · ${STRATEGY_LABEL[plan.strategy]}`}</Badge>{' '}
           <Badge tone="muted">{plan.chartType}</Badge>
         </div>
       </div>
